@@ -9,14 +9,13 @@
 #
 # The archive layout (extracted root):
 #   python/        — relocatable CPython with Ansible installed (bin/, lib/, ...)
-#   collections/   — ansible_collections/ydb_platform/{ydb,ydb_em}/...
+#   collections/   — ansible_collections/ydb_platform/ydb/...
 #
-# Two collections are bundled:
-#   ydb_platform.ydb     — YDB cluster install/delete (screens 9, 31)
-#   ydb_platform.ydb_em  — YDB Enterprise Manager install (screen 24)
+# One collection is bundled:
+#   ydb_platform.ydb — YDB cluster install/delete (screens 9, 31)
 #
 # The Python+Ansible tree is cached across invocations as long as the pinned
-# versions (and PLATFORM) in runtime.lock do not change. Both collections are
+# versions (and PLATFORM) in runtime.lock do not change. The collection is
 # always reinstalled fresh.
 set -euo pipefail
 
@@ -50,15 +49,15 @@ WORK="$ROOT/.runtime-build"
 mkdir -p "$ASSETS_DIR" "$WORK"
 
 # Local, platform-keyed cache: a full runtime build (CPython + Ansible +
-# both collections downloaded from git) takes minutes and needs network
+# the collection downloaded from git) takes minutes and needs network
 # access. Once built for a given PLATFORM, the resulting archive is copied
 # here; subsequent builds for the same PLATFORM reuse it verbatim instead of
 # rebuilding, unless FORCE_RUNTIME_BUILD=1 is set or the cache is missing.
 #
-# This is a manual cache: it does NOT track the floating git refs
-# (COLLECTION_GIT_REF/EM_COLLECTION_GIT_REF default to main/main), so
-# `rm -rf artefacts/` (or FORCE_RUNTIME_BUILD=1) is required to pick up
-# upstream collection changes without bumping runtime.lock.
+# This is a manual cache: it does NOT track the floating git ref
+# (COLLECTION_GIT_REF defaults to main), so `rm -rf artefacts/` (or
+# FORCE_RUNTIME_BUILD=1) is required to pick up upstream collection changes
+# without bumping runtime.lock.
 ARTEFACTS_DIR="$ROOT/artefacts/$PLATFORM"
 ARTEFACT_ARCHIVE="$ARTEFACTS_DIR/runtime-linux-amd64.tar.gz"
 ARTEFACT_VERSION="$ARTEFACTS_DIR/runtime.version"
@@ -132,22 +131,13 @@ if [[ ! -x "$PY" ]]; then
   exit 1
 fi
 
-# Extra Python packages the bundled collections need on the control node
-# (e.g. ydb_platform.ydb_em requires pyyaml). Installed into the same
-# interpreter that runs ansible-playbook.
-if [[ -n "${EXTRA_PYTHON_PACKAGES:-}" ]]; then
-  echo "==> Installing extra Python packages: ${EXTRA_PYTHON_PACKAGES}"
-  # shellcheck disable=SC2086 — intentional word splitting into separate args.
-  "$PY" -m pip install ${EXTRA_PYTHON_PACKAGES}
-fi
-
 GALAXY="$PYROOT/bin/ansible-galaxy"
 
 # ── ydb_platform.ydb (YDB cluster install/delete) ────────────────────────────
 #
-# Sourcing strategy (mirrors ydb_em below): prefer the pinned git URL so builds
-# are reproducible; fall back to a local checkout when the URL is unset or the
-# clone fails (the repository may be private with no credentials configured).
+# Sourcing strategy: prefer the pinned git URL so builds are reproducible; fall
+# back to a local checkout when the URL is unset or the clone fails (the
+# repository may be private with no credentials configured).
 echo "==> Installing ydb_platform.ydb collection"
 YDB_DEST="$COLLECTIONS/ansible_collections/ydb_platform/ydb"
 YDB_SOURCE=""
@@ -207,83 +197,6 @@ if [[ ! -d "$YDB_DEST" ]]; then
 fi
 echo "    ydb source: ${YDB_SOURCE:-unknown}"
 
-# ── ydb_platform.ydb_em (YDB Enterprise Manager) ────────────────────────────
-#
-# Required by the EM install flow: screen 24 runs
-# ydb_platform.ydb_em.{initial_setup,install_agent,register_agents}.
-#
-# Sourcing strategy (see runtime.lock): prefer the pinned git URL so builds are
-# reproducible; fall back to a local checkout when the URL is unset or the clone
-# fails (the repository may be private with no credentials configured).
-echo "==> Installing ydb_platform.ydb_em collection"
-EM_DEST="$COLLECTIONS/ansible_collections/ydb_platform/ydb_em"
-EM_SOURCE=""
-
-export ANSIBLE_COLLECTIONS_PATH="$COLLECTIONS"
-
-if [[ -n "${EM_COLLECTION_GIT_URL:-}" ]]; then
-  EM_REQ_FILE="$WORK/requirements-em.yaml"
-  cat > "$EM_REQ_FILE" <<EOF
-roles: []
-collections:
-  - name: ${EM_COLLECTION_GIT_URL}
-    type: git
-    version: ${EM_COLLECTION_GIT_REF:-main}
-EOF
-  if "$PY" "$GALAXY" collection install -r "$EM_REQ_FILE" -p "$COLLECTIONS" --force; then
-    EM_SOURCE="git:${EM_COLLECTION_GIT_URL}@${EM_COLLECTION_GIT_REF:-main}"
-  else
-    echo "    git install failed — falling back to the local checkout"
-  fi
-fi
-
-# Fall back to (or start from) the local checkout when git did not deliver it.
-if [[ ! -d "$EM_DEST" ]] && [[ -n "${EM_COLLECTION_PATH:-}" ]]; then
-  # Resolve relative paths against the repo root, not the caller's CWD.
-  EM_LOCAL="$EM_COLLECTION_PATH"
-  [[ "$EM_LOCAL" != /* ]] && EM_LOCAL="$ROOT/$EM_LOCAL"
-
-  if [[ -f "$EM_LOCAL/galaxy.yml" ]]; then
-    echo "    installing from local path: $EM_LOCAL"
-    # Build a tarball first so build_ignore in galaxy.yml is honoured and the
-    # installed tree matches what a git/Galaxy install would produce.
-    EM_BUILD_DIR="$WORK/em-build"
-    rm -rf "$EM_BUILD_DIR"
-    mkdir -p "$EM_BUILD_DIR"
-    "$PY" "$GALAXY" collection build "$EM_LOCAL" --output-path "$EM_BUILD_DIR" --force
-    EM_TARBALL="$(find "$EM_BUILD_DIR" -maxdepth 1 -name '*.tar.gz' -print -quit)"
-    if [[ -z "$EM_TARBALL" ]]; then
-      echo "ERROR: failed to build the ydb_em collection from $EM_LOCAL" >&2
-      exit 1
-    fi
-    "$PY" "$GALAXY" collection install "$EM_TARBALL" -p "$COLLECTIONS" --force
-    EM_SOURCE="path:$EM_LOCAL"
-  else
-    echo "ERROR: EM_COLLECTION_PATH=$EM_LOCAL does not contain galaxy.yml" >&2
-  fi
-fi
-
-unset ANSIBLE_COLLECTIONS_PATH
-
-# The EM collection is REQUIRED: without it the screen-24 playbooks cannot
-# resolve, so fail loudly rather than shipping a silently broken runtime.
-if [[ ! -d "$EM_DEST" ]]; then
-  echo "ERROR: ydb_platform.ydb_em collection was not installed into $COLLECTIONS" >&2
-  echo "       Set EM_COLLECTION_GIT_URL (with credentials) or EM_COLLECTION_PATH" >&2
-  echo "       in scripts/runtime.lock to a local checkout of the collection." >&2
-  exit 1
-fi
-
-# Verify the playbooks the installer actually invokes are present.
-for pb in initial_setup install_agent register_agents; do
-  if [[ ! -f "$EM_DEST/playbooks/$pb.yaml" ]] && [[ ! -f "$EM_DEST/playbooks/$pb.yml" ]]; then
-    echo "ERROR: ydb_em collection is missing playbooks/$pb.yaml" >&2
-    echo "       The EM install flow (screen 24) requires it." >&2
-    exit 1
-  fi
-done
-echo "    ydb_em source: ${EM_SOURCE:-unknown}"
-
 echo "==> Pruning to reduce size"
 # NOTE: only delete artifacts that are provably unused by Ansible at runtime.
 # Do NOT blanket-remove directories named "test"/"tests" — Ansible ships a
@@ -321,31 +234,6 @@ if [[ -z "$COLLECTION_REPORTED" ]]; then
   COLLECTION_REPORTED="local"
 fi
 
-# Same for the EM collection — read the version straight from its MANIFEST.json.
-EM_MANIFEST="$EM_DEST/MANIFEST.json"
-EM_COLLECTION_REPORTED="$("$PY" - "$EM_MANIFEST" <<'PYEOF' 2>/dev/null || true
-import json, sys
-try:
-    with open(sys.argv[1]) as f:
-        data = json.load(f)
-    print(data.get("collection_info", {}).get("version", ""))
-except Exception:
-    pass
-PYEOF
-)"
-if [[ -z "$EM_COLLECTION_REPORTED" ]]; then
-  # A local path install may skip MANIFEST.json; fall back to galaxy.yml.
-  # Pure-bash extraction avoids quoting pitfalls in heredocs on old bash.
-  if [[ -f "$EM_DEST/galaxy.yml" ]]; then
-    _ver=$(awk -F':?' '/^version:/{gsub(/[[:space:]""'"'"']/,"",$2); print $2; exit}' "$EM_DEST/galaxy.yml" 2>/dev/null || true)
-    [[ -n "$_ver" ]] && EM_COLLECTION_REPORTED="$_ver"
-    unset _ver
-  fi
-fi
-if [[ -z "$EM_COLLECTION_REPORTED" ]]; then
-  EM_COLLECTION_REPORTED="${EM_COLLECTION_GIT_REF:-unknown}"
-fi
-
 echo "==> Packing archive: $ARCHIVE"
 # Pack with stable, relative paths: python/ and collections/ at the root.
 rm -f "$ARCHIVE"
@@ -361,7 +249,6 @@ cat > "$VERSION_FILE" <<JSON
   "ansible": "${ANSIBLE_REPORTED:-$ANSIBLE_VERSION}",
   "ansible_core": "${CORE_REPORTED:-$ANSIBLE_CORE_VERSION}",
   "collection": "${COLLECTION_REPORTED:-unknown}",
-  "em_collection": "${EM_COLLECTION_REPORTED:-unknown}",
   "sha256": "${SHA}",
   "collections_subdir": "collections",
   "root_subdir": "python"
@@ -378,5 +265,4 @@ echo "    archive : $ARCHIVE ($(du -h "$ARCHIVE" | awk '{print $1}'))"
 echo "    sha256  : $SHA"
 echo "    python  : ${CPYTHON_VERSION}"
 echo "    ansible : ${ANSIBLE_REPORTED:-$ANSIBLE_VERSION}"
-echo "    collection   (ydb)   : ${COLLECTION_REPORTED:-unknown}"
-echo "    collection (ydb_em)  : ${EM_COLLECTION_REPORTED:-unknown}"
+echo "    collection (ydb) : ${COLLECTION_REPORTED:-unknown}"

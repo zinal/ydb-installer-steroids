@@ -8,16 +8,10 @@ interface RuntimeState {
   ansible: string
   ansibleCore: string
   collection: string
-  emCollection: string
   path: string
   error: string
   loading: boolean
   loaded: boolean
-  /**
-   * Enables the YDB EM scenarios (ydb-em wizard, EM delete) in the UI.
-   * Set from the --show-em-scenarios CLI flag; off by default.
-   */
-  showEmScenarios: boolean
 }
 
 export const useRuntimeStore = defineStore('runtime', {
@@ -28,12 +22,10 @@ export const useRuntimeStore = defineStore('runtime', {
     ansible: '',
     ansibleCore: '',
     collection: '',
-    emCollection: '',
     path: '',
     error: '',
     loading: false,
     loaded: false,
-    showEmScenarios: false,
   }),
 
   getters: {
@@ -55,9 +47,7 @@ export const useRuntimeStore = defineStore('runtime', {
         this.ansible = info.ansible ?? ''
         this.ansibleCore = info.ansible_core ?? ''
         this.collection = info.collection ?? ''
-        this.emCollection = info.em_collection ?? ''
         this.path = info.path ?? ''
-        this.showEmScenarios = info.show_em_scenarios ?? false
         if (info.error) this.error = info.error
         this.loaded = true
       } catch (e) {

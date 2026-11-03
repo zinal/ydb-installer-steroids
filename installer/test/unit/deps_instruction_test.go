@@ -70,29 +70,6 @@ func TestInstructionProvider_Collection(t *testing.T) {
 	}
 }
 
-func TestInstructionProvider_EMCollection(t *testing.T) {
-	p := &checker.InstructionProvider{}
-
-	for _, osName := range []string{"ubuntu", "centos", "macos"} {
-		got := p.ForDep("ydb_platform.ydb_em", osName)
-		if got == "" {
-			t.Errorf("ForDep(ydb_platform.ydb_em, %s) returned empty string", osName)
-		}
-		if !strings.Contains(got, "ansible-galaxy") {
-			t.Errorf("ForDep(ydb_platform.ydb_em, %s) missing ansible-galaxy", osName)
-		}
-		if !strings.Contains(got, "ydb_em") {
-			t.Errorf("ForDep(ydb_platform.ydb_em, %s) missing ydb_em", osName)
-		}
-		if !strings.Contains(got, "git+") {
-			t.Errorf("ForDep(ydb_platform.ydb_em, %s) missing git+ URL", osName)
-		}
-		if !strings.Contains(got, "pyyaml") {
-			t.Errorf("ForDep(ydb_platform.ydb_em, %s) missing pyyaml", osName)
-		}
-	}
-}
-
 func TestInstructionProvider_UnknownDep(t *testing.T) {
 	p := &checker.InstructionProvider{}
 	got := p.ForDep("unknown-tool", "ubuntu")
@@ -113,7 +90,7 @@ func TestInstructionProvider_AllInstructions(t *testing.T) {
 	p := &checker.InstructionProvider{}
 	all := p.AllInstructions("ubuntu")
 
-	expectedKeys := []string{"python", "ansible", "ydb_platform.ydb", "ydb_platform.ydb_em"}
+	expectedKeys := []string{"python", "ansible", "ydb_platform.ydb"}
 	for _, key := range expectedKeys {
 		if _, ok := all[key]; !ok {
 			t.Errorf("AllInstructions(ubuntu) missing key %q", key)

@@ -17,23 +17,17 @@ type ConfigDiscovery struct {
 
 	ConfigFound bool
 	ConfigPath  string
-
-	EMInventoryFound bool
-	EMInventoryPath  string
-	EMInventoryData  *models.EMConfig
 }
 
 // ConfigWatcher handles discovery and parsing of configuration files
 // in the current working directory.
 type ConfigWatcher struct {
-	inventoryService   *InventoryService
-	emInventoryService *EMInventoryService
+	inventoryService *InventoryService
 }
 
 func NewConfigWatcher() *ConfigWatcher {
 	return &ConfigWatcher{
-		inventoryService:   NewInventoryService(),
-		emInventoryService: NewEMInventoryService(),
+		inventoryService: NewInventoryService(),
 	}
 }
 
@@ -58,16 +52,6 @@ func (w *ConfigWatcher) Discover(cwd string) ConfigDiscovery {
 		result.ConfigPath = configPath
 	}
 
-	emInvPath := filepath.Join(cwd, "inventory", "90-inventory.yaml")
-	if _, err := os.Stat(emInvPath); err == nil {
-		result.EMInventoryFound = true
-		result.EMInventoryPath = emInvPath
-
-		if emData, parseErr := w.emInventoryService.Parse(emInvPath); parseErr == nil {
-			result.EMInventoryData = emData
-		}
-	}
-
 	return result
 }
 
@@ -81,12 +65,4 @@ func (w *ConfigWatcher) HasInventory(discovery ConfigDiscovery) bool {
 
 func (w *ConfigWatcher) HasConfig(discovery ConfigDiscovery) bool {
 	return discovery.ConfigFound
-}
-
-func (w *ConfigWatcher) GetEMInventoryData(discovery ConfigDiscovery) *models.EMConfig {
-	return discovery.EMInventoryData
-}
-
-func (w *ConfigWatcher) HasEMInventory(discovery ConfigDiscovery) bool {
-	return discovery.EMInventoryFound && discovery.EMInventoryData != nil
 }

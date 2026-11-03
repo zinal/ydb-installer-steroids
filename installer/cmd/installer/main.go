@@ -36,7 +36,6 @@ func main() {
 	noBrowser := flag.Bool("no-browser", false, "do not try to open the system browser")
 	useSystemDeps := flag.Bool("use-system-deps", false, "ignore the bundled runtime and use the host's system python/ansible")
 	extractRuntimeOnly := flag.Bool("extract-runtime-only", false, "extract the bundled runtime and exit (pre-warm cache)")
-	showEmScenarios := flag.Bool("show-em-scenarios", false, "show YDB EM installation scenarios (ydb-em wizard and EM delete)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "YDB Installer version %s.\n", Version)
@@ -55,12 +54,6 @@ func main() {
 	// through it and no host dependencies are required. When not bundled (or
 	// --use-system-deps), we fall back to the host's system tools.
 	bundledDeps, runtimeInfo, ansibleRuntime := setupRuntime(*useSystemDeps)
-	runtimeInfo.ShowEMScenarios = *showEmScenarios
-	emScenariosState := "hidden"
-	if *showEmScenarios {
-		emScenariosState = "enabled"
-	}
-	log.Printf("EM scenarios: %s", emScenariosState)
 
 	if *extractRuntimeOnly {
 		if ansibleRuntime != nil {
@@ -79,9 +72,7 @@ func main() {
 	// appearing as install success on screen 9).
 	states := models.NewOperationStates()
 	states.Install.AnsibleRuntime = ansibleRuntime
-	states.InstallEM.AnsibleRuntime = ansibleRuntime
 	states.DeleteYdb.AnsibleRuntime = ansibleRuntime
-	states.DeleteEM.AnsibleRuntime = ansibleRuntime
 
 	cwd, _ := os.Getwd()
 
@@ -101,11 +92,6 @@ func main() {
 		discovery.InventoryPath = filepath.Join(cwd, "inventory", "50-inventory.yaml")
 	}
 
-	emInventoryPath := discovery.EMInventoryPath
-	if emInventoryPath == "" {
-		emInventoryPath = filepath.Join(cwd, "inventory", "90-inventory.yaml")
-	}
-
 	if discovery.InventoryData != nil {
 		store.SetInventory(discovery.InventoryData, discovery.InventoryFound, discovery.ConfigFound)
 		log.Printf("inventory loaded from %s (%d hosts)", discovery.InventoryPath, len(discovery.InventoryData.Hosts))
@@ -113,15 +99,7 @@ func main() {
 		log.Printf("no inventory file found, starting with empty session")
 	}
 
-	if discovery.EMInventoryData != nil {
-		store.SetEMConfig(discovery.EMInventoryData, discovery.EMInventoryFound)
-		log.Printf("EM inventory loaded from %s (%d EM hosts)", discovery.EMInventoryPath, len(discovery.EMInventoryData.Hosts))
-	} else {
-		log.Printf("no EM inventory file found, starting with empty EM config")
-	}
-
 	inventoryWriter := config.NewInventoryWriter()
-	emInventoryWriter := config.NewEMInventoryWriter()
 
 	inventoryWSHub := handlers.NewInventoryWSHub()
 
@@ -137,9 +115,6 @@ func main() {
 				if newDiscovery.InventoryData != nil {
 					store.SetInventory(newDiscovery.InventoryData, newDiscovery.InventoryFound, newDiscovery.ConfigFound)
 				}
-				if newDiscovery.EMInventoryData != nil {
-					store.SetEMConfig(newDiscovery.EMInventoryData, newDiscovery.EMInventoryFound)
-				}
 				inventoryWSHub.Broadcast([]byte(`{"event":"inventory_changed"}`))
 			}
 		}()
@@ -152,28 +127,22 @@ func main() {
 		spa = nil
 	}
 
-	// Set inventory path for Ansible operations — all four states share the
-	// same inventory path. runAnsibleOperation/runPlaybookSequence reduce a
+	// Set inventory path for Ansible operations. runAnsibleOperation reduces a
 	// *.yaml path to its parent directory, so Ansible loads every inventory
-	// file in that directory (50-inventory.yaml AND 90-inventory.yaml). The
-	// EM playbooks need vars from both, so this is intentional.
+	// file in that directory.
 	states.Install.InventoryPath = discovery.InventoryPath
-	states.InstallEM.InventoryPath = discovery.InventoryPath
 	states.DeleteYdb.InventoryPath = discovery.InventoryPath
-	states.DeleteEM.InventoryPath = discovery.InventoryPath
 
 	handler := api.New(api.Options{
-		SessionStore:      store,
-		OperationStates:   states,
-		SPA:               spa,
-		InventoryWriter:   inventoryWriter,
-		EMInventoryWriter: emInventoryWriter,
-		InventoryWSHub:    inventoryWSHub,
-		InventoryPath:     discovery.InventoryPath,
-		EMInventoryPath:   emInventoryPath,
-		ConfigPath:        filepath.Join(cwd, "files", "config.yaml"),
-		BundledDeps:       bundledDeps,
-		RuntimeInfo:       runtimeInfo,
+		SessionStore:    store,
+		OperationStates: states,
+		SPA:             spa,
+		InventoryWriter: inventoryWriter,
+		InventoryWSHub:  inventoryWSHub,
+		InventoryPath:   discovery.InventoryPath,
+		ConfigPath:      filepath.Join(cwd, "files", "config.yaml"),
+		BundledDeps:     bundledDeps,
+		RuntimeInfo:     runtimeInfo,
 	})
 
 	addr := joinHostPort(*host, *port)
@@ -187,7 +156,7 @@ func main() {
 	// user cannot miss the URL. The working directory is shown because cluster
 	// data (inventory/, config.yaml, ansible.cfg) is written to the CWD, not
 	// next to the binary — the binary is portable and reusable from any folder.
-	banner.Print("http://" + addr, cwd)
+	banner.Print("http://"+addr, cwd)
 
 	go func() {
 		log.Printf("YDB Installer listening on http://%s (lang=%s)", addr, defaultLang)
@@ -231,12 +200,11 @@ func setupRuntime(useSystem bool) (*checker.BundledInfo, handlers.RuntimeInfo, a
 	}
 
 	info := handlers.RuntimeInfo{
-		Embedded:     meta.Embedded,
-		Python:       meta.Python,
-		Ansible:      meta.Ansible,
-		AnsibleCore:  meta.AnsibleCore,
-		Collection:   meta.Collection,
-		EMCollection: meta.EMCollection,
+		Embedded:    meta.Embedded,
+		Python:      meta.Python,
+		Ansible:     meta.Ansible,
+		AnsibleCore: meta.AnsibleCore,
+		Collection:  meta.Collection,
 	}
 
 	if !meta.Embedded {
@@ -258,22 +226,14 @@ func setupRuntime(useSystem bool) (*checker.BundledInfo, handlers.RuntimeInfo, a
 
 	info.Extracted = true
 	info.Path = paths.Root
-	log.Printf("bundled runtime ready: python=%s ansible=%s ydb=%s ydb_em=%s (%s)",
-		meta.Python, meta.Ansible, meta.Collection, meta.EMCollection, paths.Root)
-
-	// The EM install flow (screen 24) needs ydb_platform.ydb_em. Warn rather
-	// than fail: the YDB flows remain fully usable without it.
-	if meta.EMCollection == "" {
-		log.Printf("warning: bundled runtime has no ydb_platform.ydb_em collection — " +
-			"the YDB EM installation flow will fail; rebuild with `make runtime`")
-	}
+	log.Printf("bundled runtime ready: python=%s ansible=%s ydb=%s (%s)",
+		meta.Python, meta.Ansible, meta.Collection, paths.Root)
 
 	bundled := &checker.BundledInfo{
-		Python:       meta.Python,
-		Ansible:      meta.Ansible,
-		AnsibleCore:  meta.AnsibleCore,
-		Collection:   meta.Collection,
-		EMCollection: meta.EMCollection,
+		Python:      meta.Python,
+		Ansible:     meta.Ansible,
+		AnsibleCore: meta.AnsibleCore,
+		Collection:  meta.Collection,
 	}
 	return bundled, info, paths
 }

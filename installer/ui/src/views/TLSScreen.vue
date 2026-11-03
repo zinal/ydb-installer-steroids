@@ -5,14 +5,12 @@ import { useSessionStore } from '@/stores/session'
 import { useTlsStore } from '@/stores/tls'
 import { useHostsStore } from '@/stores/hosts'
 import { useTopologyStore } from '@/stores/topology'
-import { useEmStore } from '@/stores/em'
 import ScreenEyebrow from '@/components/common/ScreenEyebrow.vue'
 
 const session = useSessionStore()
 const tlsStore = useTlsStore()
 const hostsStore = useHostsStore()
 const topologyStore = useTopologyStore()
-const emStore = useEmStore()
 const { t } = useI18n()
 
 const topologyLabel = computed(() => {
@@ -53,21 +51,7 @@ const ydbHosts = computed(() => {
   return hosts.filter(h => h.trim() !== '')
 })
 
-/** When EM mode is on, union YDB hosts with EM hosts for cert coverage. */
-const allHosts = computed(() => {
-  const base = ydbHosts.value
-  if (!session.showEmStep) return base
-  const emHosts = emStore.hosts.map(h => h.fqdn.trim()).filter(Boolean)
-  const seen = new Set(base.map(h => h.toLowerCase()))
-  const merged = [...base]
-  for (const h of emHosts) {
-    if (!seen.has(h.toLowerCase())) {
-      seen.add(h.toLowerCase())
-      merged.push(h)
-    }
-  }
-  return merged
-})
+const allHosts = computed(() => ydbHosts.value)
 
 const hostCount = computed(() => allHosts.value.length)
 
@@ -78,17 +62,11 @@ const canValidate = computed(() => certPath.value.trim() !== '' && !tlsStore.isV
 async function handleGenerate() {
   if (!canGenerate.value) return
   await tlsStore.generateCertificates(allHosts.value, true)
-  if (session.showEmStep && tlsStore.certPath.trim()) {
-    emStore.tlsCertPath = tlsStore.certPath.trim()
-  }
 }
 
 async function handleValidate() {
   if (!canValidate.value) return
   await tlsStore.validateCertificates(allHosts.value)
-  if (session.showEmStep && tlsStore.certPath.trim()) {
-    emStore.tlsCertPath = tlsStore.certPath.trim()
-  }
 }
 
 watch(() => tlsStore.canProceed, (can) => {
@@ -100,16 +78,6 @@ watch(() => tlsStore.error, (error) => {
     session.setCanGoNext(false)
   }
 })
-
-watch(
-  () => [session.showEmStep, tlsStore.certPath] as const,
-  ([showEm, path]) => {
-    if (showEm && path.trim()) {
-      emStore.tlsCertPath = path.trim()
-    }
-  },
-  { immediate: true },
-)
 </script>
 
 <template>

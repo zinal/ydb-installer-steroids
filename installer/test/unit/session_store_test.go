@@ -121,8 +121,8 @@ func TestReset_RestoresDefaults(t *testing.T) {
 }
 
 func TestFlowSteps_KnownAndUnknown(t *testing.T) {
-	if got := session.FlowSteps(models.FlowYDB); len(got) != 11 {
-		t.Errorf("FlowYDB should have 11 steps, got %d", len(got))
+	if got := session.FlowSteps(models.FlowYDB); len(got) != 10 {
+		t.Errorf("FlowYDB should have 10 steps, got %d", len(got))
 	}
 	if got := session.FlowSteps(models.FlowDeleteYDB); len(got) != 3 {
 		t.Errorf("FlowDeleteYDB should have 3 steps, got %d", len(got))
@@ -147,8 +147,8 @@ func TestNew_UIStateInitialized(t *testing.T) {
 	if len(got.UIState.Errored) != 0 {
 		t.Errorf("UIState.Errored = %v, want empty", got.UIState.Errored)
 	}
-	if got.UIState.ShowEMStep || got.UIState.ConfigGenerated {
-		t.Errorf("UIState flags should default to false, got %+v", got.UIState)
+	if got.UIState.ConfigGenerated {
+		t.Errorf("UIState.ConfigGenerated should default to false, got %+v", got.UIState)
 	}
 }
 
@@ -159,7 +159,6 @@ func TestUpdate_UIStatePersists(t *testing.T) {
 			CurrentStep:     "6",
 			Visited:         []string{"1", "2", "3", "4", "5", "6"},
 			Errored:         []string{"4"},
-			ShowEMStep:      true,
 			ConfigGenerated: true,
 		},
 	}
@@ -176,13 +175,13 @@ func TestUpdate_UIStatePersists(t *testing.T) {
 	if len(got.UIState.Errored) != 1 || got.UIState.Errored[0] != "4" {
 		t.Errorf("UIState.Errored = %v, want [4]", got.UIState.Errored)
 	}
-	if !got.UIState.ShowEMStep || !got.UIState.ConfigGenerated {
-		t.Errorf("UIState flags not persisted, got %+v", got.UIState)
+	if !got.UIState.ConfigGenerated {
+		t.Errorf("UIState.ConfigGenerated not persisted, got %+v", got.UIState)
 	}
 
 	// Verify it survives a subsequent Get() (i.e. actually stored, not just returned).
 	again := s.Get()
-	if again.UIState.CurrentStep != "6" || !again.UIState.ShowEMStep {
+	if again.UIState.CurrentStep != "6" || !again.UIState.ConfigGenerated {
 		t.Errorf("UIState not retained across Get(), got %+v", again.UIState)
 	}
 }
@@ -224,7 +223,6 @@ func TestReset_ClearsUIState(t *testing.T) {
 		UIState: &models.UIState{
 			CurrentStep: "8",
 			Visited:     []string{"1", "2", "3", "4", "5", "6", "7", "8"},
-			ShowEMStep:  true,
 		},
 	})
 
@@ -239,7 +237,7 @@ func TestReset_ClearsUIState(t *testing.T) {
 	if len(got.UIState.Visited) != 1 || got.UIState.Visited[0] != "1" {
 		t.Errorf("UIState.Visited after reset = %v, want [1]", got.UIState.Visited)
 	}
-	if got.UIState.ShowEMStep {
-		t.Error("UIState.ShowEMStep should be false after reset")
+	if got.UIState.ConfigGenerated {
+		t.Error("UIState.ConfigGenerated should be false after reset")
 	}
 }

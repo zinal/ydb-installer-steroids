@@ -2,21 +2,17 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSessionStore } from '@/stores/session'
-import { useEmStore } from '@/stores/em'
 import { useConnectivityStore } from '@/stores/connectivity'
-import { useRuntimeStore } from '@/stores/runtime'
 import { useDeps } from '@/composables/useDeps'
 import AppVersion from '@/components/common/AppVersion.vue'
 import DepsPanel from '@/components/common/DepsPanel.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 
-type Mode = 'ydb' | 'ydb-em' | 'delete-ydb' | 'delete-em-ydb'
+type Mode = 'ydb' | 'delete-ydb'
 
 const { t } = useI18n()
 const session = useSessionStore()
-const emStore = useEmStore()
 const connectivity = useConnectivityStore()
-const runtime = useRuntimeStore()
 
 const selected = computed<Mode | null>(() => (session.flow as Mode) || null)
 
@@ -27,7 +23,7 @@ onMounted(() => {
 })
 
 watch([canProceed, depsLoading, selected], ([proceed, loading, mode]) => {
-  const isDeleteFlow = mode === 'delete-ydb' || mode === 'delete-em-ydb'
+  const isDeleteFlow = mode === 'delete-ydb'
   
   if (isDeleteFlow && !loading) {
     session.setCanGoNext(proceed)
@@ -53,62 +49,32 @@ const options = computed<ModeOption[]>(() => [
     icon: 'mdi-database-plus-outline',
   },
   {
-    value: 'ydb-em',
-    group: 'install',
-    title: t('intro.emWizard'),
-    description: t('intro.emWizardDesc'),
-    icon: 'mdi-cog-transfer-outline',
-  },
-  {
     value: 'delete-ydb',
     group: 'remove',
     title: t('intro.deleteYdb'),
     description: t('intro.deleteYdbDesc'),
     icon: 'mdi-database-remove-outline',
   },
-  {
-    value: 'delete-em-ydb',
-    group: 'remove',
-    title: t('intro.deleteEmYdb'),
-    description: t('intro.deleteEmYdbDesc'),
-    icon: 'mdi-trash-can-outline',
-  },
 ])
 
-function isEMMode(mode: Mode): boolean {
-  return mode === 'ydb-em' || mode === 'delete-em-ydb'
-}
-
-const visibleOptions = computed(() => options.value.filter(
-  (option) => runtime.showEmScenarios || !isEMMode(option.value),
-))
-const installOptions = computed(() => visibleOptions.value.filter((o) => o.group === 'install'))
-const removeOptions = computed(() => visibleOptions.value.filter((o) => o.group === 'remove'))
+const installOptions = computed(() => options.value.filter((o) => o.group === 'install'))
+const removeOptions = computed(() => options.value.filter((o) => o.group === 'remove'))
 
 /** YDB delete needs 50-inventory + config.yaml. */
 const canSelectDeleteYdb = computed(() => session.inventoryFound && session.configFound)
 
-/** EM delete needs 90-inventory only (does not wipe YDB). */
-const canSelectDeleteEm = computed(() => emStore.emInventoryFound)
-
 function canSelectDelete(mode: Mode): boolean {
   if (mode === 'delete-ydb') return canSelectDeleteYdb.value
-  if (mode === 'delete-em-ydb') return canSelectDeleteEm.value
   return true
 }
 
-/** Show a hint when at least one delete option is locked. */
-const showDeleteHint = computed(() =>
-  !canSelectDeleteYdb.value || (runtime.showEmScenarios && !canSelectDeleteEm.value),
-)
+/** Show a hint when YDB delete is locked. */
+const showDeleteHint = computed(() => !canSelectDeleteYdb.value)
 
-const deleteHintText = computed(() => {
-  if (!canSelectDeleteYdb.value) return t('intro.deleteRequiresConfig')
-  return t('intro.deleteEmRequiresConfig')
-})
+const deleteHintText = computed(() => t('intro.deleteRequiresConfig'))
 
 async function selectMode(mode: Mode) {
-  if ((mode === 'delete-ydb' || mode === 'delete-em-ydb') && !canSelectDelete(mode)) {
+  if (mode === 'delete-ydb' && !canSelectDelete(mode)) {
     return
   }
   await session.setFlow(mode)

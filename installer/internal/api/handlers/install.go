@@ -19,60 +19,9 @@ var installYdbTasks = []models.Task{
 	{ID: 1, Name: "Running ydb_platform.ydb.initial_setup", Status: models.TaskPending},
 }
 
-// emCollection is the Ansible collection namespace that provides the YDB EM
-// playbooks. Declared once so a collection rename is a single-line change.
-const emCollection = "ydb_platform.ydb_em"
-
-// playbookStep pairs an Ansible playbook with the user-visible task label
-// shown on the installation screen.
-type playbookStep struct {
-	// Playbook is the fully-qualified Ansible playbook name.
-	Playbook string
-	// TaskName is the label rendered in the task list.
-	TaskName string
-	// ExtraVars is an optional JSON string passed to ansible-playbook via
-	// --extra-vars. Empty means no extra vars.
-	ExtraVars string
-}
-
-// installEmSteps is the ordered YDB EM installation sequence and the single
-// source of truth for it: the task list, the progress percentage and the log
-// prefixes are all derived from this slice. Adding, removing or reordering a
-// step is therefore a one-line change here.
-var installEmSteps = []playbookStep{
-	{Playbook: emCollection + ".initial_setup", TaskName: "Running " + emCollection + ".initial_setup"},
-	{Playbook: emCollection + ".install_agent", TaskName: "Running " + emCollection + ".install_agent"},
-	{Playbook: emCollection + ".register_agents", TaskName: "Running " + emCollection + ".register_agents"},
-}
-
-// buildTasks converts an ordered playbook sequence into a fresh task list.
-// Returns a new slice on every call so concurrent operations never share
-// task state.
-func buildTasks(steps []playbookStep) []models.Task {
-	tasks := make([]models.Task, len(steps))
-	for i, s := range steps {
-		tasks[i] = models.Task{ID: i + 1, Name: s.TaskName, Status: models.TaskPending}
-	}
-	return tasks
-}
-
 // deleteYdbTasks defines the ordered task list for the delete-ydb operation.
 var deleteYdbTasks = []models.Task{
 	{ID: 1, Name: "Running ydb_platform.ydb.format_cluster", Status: models.TaskPending},
-}
-
-// deleteEmSteps is the ordered YDB EM deletion sequence (EM-only; does not
-// wipe the YDB cluster). unregister_agents runs first so CP drops agent
-// registrations while EM is still up; uninstall then removes EM services
-// and files. uninstall defaults to Ansible group "ydb", so ExtraVars pins
-// the target to ydb_em hosts only.
-var deleteEmSteps = []playbookStep{
-	{Playbook: emCollection + ".unregister_agents", TaskName: "Running " + emCollection + ".unregister_agents"},
-	{
-		Playbook:  emCollection + ".uninstall",
-		TaskName:  "Running " + emCollection + ".uninstall",
-		ExtraVars: `{"playbook_hosts":"ydb_em"}`,
-	},
 }
 
 // createDatabaseTasks defines the task list for creating a single database.
@@ -433,17 +382,6 @@ func YdbStart(states *models.OperationStates, store *session.Store) http.Handler
 					})
 					taskID++
 				}
-
-				if inv.Database.ConfigVariant == "single-plus-em" {
-					for _, step := range installEmSteps {
-						tasks = append(tasks, models.Task{
-							ID:     taskID,
-							Name:   step.TaskName,
-							Status: models.TaskPending,
-						})
-						taskID++
-					}
-				}
 			}
 		}
 
@@ -460,49 +398,6 @@ func YdbStart(states *models.OperationStates, store *session.Store) http.Handler
 
 		states.Install.SetRunning(tasks, cancelFn)
 		go runYdbInstall(states.Install, store, tasks, cancelCh)
-
-		writeJSON(w, http.StatusAccepted, map[string]string{"status": "started"})
-	}
-}
-
-// EmInstallStart handles POST /api/install/ydb-em/start.
-// Always uses the InstallEM state (hard-coded — this endpoint is only for the
-// ydb-em flow).
-//
-// Unlike the YDB install there is no config.yaml generation step: the whole EM
-// configuration lives in 90-inventory.yaml, which screens 21–23 already keep in
-// sync. Screen 24 therefore only runs the playbook sequence.
-func EmInstallStart(states *models.OperationStates) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.Header().Set("Allow", "POST")
-			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-
-		if st, _, _, _ := states.InstallEM.Snapshot(); st == models.StatusRunning {
-			writeJSON(w, http.StatusConflict, map[string]string{
-				"status": "already_running",
-				"error":  "EM installation already running",
-			})
-			return
-		}
-
-		tasks := buildTasks(installEmSteps)
-
-		cancelCh := make(chan struct{})
-		once := make(chan struct{})
-		cancelFn := func() {
-			select {
-			case <-once:
-			default:
-				close(once)
-				close(cancelCh)
-			}
-		}
-
-		states.InstallEM.SetRunning(tasks, cancelFn)
-		go runPlaybookSequence(states.InstallEM, tasks, installEmSteps, cancelCh, "install-em")
 
 		writeJSON(w, http.StatusAccepted, map[string]string{"status": "started"})
 	}
@@ -610,50 +505,8 @@ func DeleteYdbStart(states *models.OperationStates) http.HandlerFunc {
 	}
 }
 
-// DeleteEmYdbStart handles POST /api/install/delete-em-ydb/start.
-// Always uses the DeleteEM state (hard-coded — this endpoint is only for the
-// delete-em-ydb flow). Removes YDB EM only (unregister agents + uninstall);
-// does not format/wipe the YDB cluster.
-func DeleteEmYdbStart(states *models.OperationStates) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.Header().Set("Allow", "POST")
-			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-
-		if st, _, _, _ := states.DeleteEM.Snapshot(); st == models.StatusRunning {
-			writeJSON(w, http.StatusConflict, map[string]string{
-				"status": "already_running",
-				"error":  "EM deletion already running",
-			})
-			return
-		}
-
-		tasks := buildTasks(deleteEmSteps)
-
-		cancelCh := make(chan struct{})
-		once := make(chan struct{})
-		cancelFn := func() {
-			select {
-			case <-once:
-			default:
-				close(once)
-				close(cancelCh)
-			}
-		}
-
-		states.DeleteEM.SetRunning(tasks, cancelFn)
-		go runPlaybookSequence(states.DeleteEM, tasks, deleteEmSteps, cancelCh, "delete-em-ydb")
-
-		writeJSON(w, http.StatusAccepted, map[string]string{"status": "started"})
-	}
-}
-
 // resolveInstallState picks the InstallState for a request.
-// Optional query param op=<flow> overrides the session flow so an in-flow
-// secondary phase (e.g. EM install while session.flow is still ydb) can
-// poll/cancel/stream the correct OperationStates slot.
+// Optional query param op=<flow> overrides the session flow.
 func resolveInstallState(states *models.OperationStates, store *session.Store, r *http.Request) *models.InstallState {
 	if op := r.URL.Query().Get("op"); op != "" {
 		f := models.Flow(op)
@@ -669,7 +522,7 @@ func resolveInstallState(states *models.OperationStates, store *session.Store, r
 // InstallStatus handles GET /api/install/status.
 // Returns the state for the current session flow so that install and delete
 // operations never leak into each other. Optional ?op=<flow> overrides the
-// session flow (used by ydb-flow EM phase on screen 9.1).
+// session flow.
 func InstallStatus(states *models.OperationStates, store *session.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -847,101 +700,9 @@ func runYdbInstall(
 				state.UpdateTask(tasks[taskIdx].ID, models.TaskDone)
 			}
 		}
-
-		if inv := store.GetInventory(); inv != nil && inv.Database != nil && inv.Database.ConfigVariant == "single-plus-em" {
-			emTaskOffset := 1 + (len(inv.Database.Entries) - 1)
-			for j, step := range installEmSteps {
-				taskIdx := emTaskOffset + j
-				if taskIdx >= len(tasks) {
-					state.WriteLog(fmt.Sprintf("[install] skipping %s — no task slot", step.Playbook))
-					continue
-				}
-				state.UpdateTask(tasks[taskIdx].ID, models.TaskRunning)
-				state.WriteLog(fmt.Sprintf("[install] %s", step.TaskName))
-				if err := runSinglePlaybook(state, step.Playbook, step.ExtraVars, cancelCh); err != nil {
-					state.SetError("em-install", "", err.Error())
-					return
-				}
-				state.UpdateTask(tasks[taskIdx].ID, models.TaskDone)
-			}
-		}
 	}
 
 	state.SetDone()
-}
-
-// runPlaybookSequence runs an ordered list of playbooks one after another,
-// updating the matching task as each one starts and completes.
-//
-// It is the generic counterpart to runYdbInstall: use it whenever an operation
-// is a fixed sequence of playbooks with no data passed between the steps.
-// runYdbInstall is deliberately NOT built on top of this because it computes
-// per-database extra-vars between playbooks.
-//
-// Aborts on the first failure (SetError) and honours cancellation
-// (SetCancelled). Designed to run in a goroutine; the caller returns 202
-// immediately.
-func runPlaybookSequence(
-	state *models.InstallState,
-	tasks []models.Task,
-	steps []playbookStep,
-	cancelCh <-chan struct{},
-	operationType string,
-) {
-	if len(steps) == 0 {
-		state.SetDone()
-		return
-	}
-
-	// Reset once for the whole sequence — clears the ring buffer from any
-	// previous run and rotates the log file.
-	if state.Broadcaster != nil {
-		state.Broadcaster.Reset(operationType)
-	}
-
-	if state.InventoryPath == "" {
-		state.WriteLog("[" + operationType + "] Error: inventory path not configured")
-		state.SetError(operationType, "", "inventory path not configured")
-		return
-	}
-
-	for i, step := range steps {
-		if i >= len(tasks) {
-			break
-		}
-
-		// Cancellation may arrive between two playbooks, where no runner is
-		// active to observe it — check explicitly before starting the next one.
-		select {
-		case <-cancelCh:
-			state.WriteLog("[" + operationType + "] Cancelled by user")
-			state.SetCancelled()
-			return
-		default:
-		}
-
-		state.UpdateTask(tasks[i].ID, models.TaskRunning)
-		state.WriteLog("[" + operationType + "] Starting: " + step.Playbook)
-
-		if err := runSinglePlaybook(state, step.Playbook, step.ExtraVars, cancelCh); err != nil {
-			// runSinglePlaybook reports a cancellation as a plain error, so
-			// distinguish the two here to set the correct terminal state.
-			select {
-			case <-cancelCh:
-				state.WriteLog("[" + operationType + "] Cancelled by user")
-				state.SetCancelled()
-			default:
-				state.WriteLog("[" + operationType + "] Error: " + err.Error())
-				state.SetError(step.Playbook, "", err.Error())
-			}
-			return
-		}
-
-		state.UpdateTask(tasks[i].ID, models.TaskDone)
-	}
-
-	state.SetDone()
-	state.WriteLog("[" + operationType + "] Operation completed successfully")
 }
 
 // runAnsibleOperation executes an Ansible playbook for the given operation.

@@ -13,10 +13,8 @@ import (
 )
 
 var Flows = map[models.Flow][]string{
-	models.FlowYDB:         {"1", "2", "3", "4", "5", "6", "7", "7.1", "8", "9", "10"},
-	models.FlowYDBEM:       {"1", "20", "21", "22", "23", "24", "25"},
-	models.FlowDeleteYDB:   {"1", "30", "31"},
-	models.FlowDeleteEMYDB: {"1", "32", "33"},
+	models.FlowYDB:       {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"},
+	models.FlowDeleteYDB: {"1", "30", "31"},
 }
 
 // FlowSteps returns the canonical list of step IDs for a flow, or {"1"} for
@@ -108,7 +106,6 @@ func (s *Store) Update(u models.SessionUpdate) models.Session {
 			CurrentStep:     u.UIState.CurrentStep,
 			Visited:         visited,
 			Errored:         errored,
-			ShowEMStep:      u.UIState.ShowEMStep,
 			ConfigGenerated: u.UIState.ConfigGenerated,
 		}
 	}
@@ -134,11 +131,6 @@ func cloneSession(in models.Session) models.Session {
 		out.Inventory = &models.InventoryData{}
 		_ = json.Unmarshal(invBytes, out.Inventory)
 	}
-	if in.EMConfig != nil {
-		emBytes, _ := json.Marshal(in.EMConfig)
-		out.EMConfig = &models.EMConfig{}
-		_ = json.Unmarshal(emBytes, out.EMConfig)
-	}
 	if in.UIState != nil {
 		visited := make([]string, len(in.UIState.Visited))
 		copy(visited, in.UIState.Visited)
@@ -148,7 +140,6 @@ func cloneSession(in models.Session) models.Session {
 			CurrentStep:     in.UIState.CurrentStep,
 			Visited:         visited,
 			Errored:         errored,
-			ShowEMStep:      in.UIState.ShowEMStep,
 			ConfigGenerated: in.UIState.ConfigGenerated,
 		}
 	}
@@ -195,31 +186,4 @@ func (s *Store) SetConfigFound(found bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.session.ConfigFound = found
-}
-
-func (s *Store) SetEMConfig(data *models.EMConfig, emInvFound bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.session.EMConfig = data
-	s.session.EMInventoryFound = emInvFound
-}
-
-func (s *Store) GetEMConfig() *models.EMConfig {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.session.EMConfig == nil {
-		return nil
-	}
-	emBytes, _ := json.Marshal(s.session.EMConfig)
-	out := &models.EMConfig{}
-	_ = json.Unmarshal(emBytes, out)
-	return out
-}
-
-// GetEMInventoryFound reports whether the EM inventory file (90-inventory.yaml)
-// was discovered on disk.
-func (s *Store) GetEMInventoryFound() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.session.EMInventoryFound
 }

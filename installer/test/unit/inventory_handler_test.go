@@ -102,17 +102,14 @@ func newServerFromHandler(h http.Handler) *httptest.Server {
 	return httptest.NewServer(h)
 }
 
-// newInventoryServer builds a router with the inventory writers wired.
-// emInvPath may be "" to skip the EM AZ-patch side of PUT /api/inventory.
-func newInventoryServer(t *testing.T, store *session.Store, emInvPath string) *httptest.Server {
+// newInventoryServer builds a router with the inventory writer wired.
+func newInventoryServer(t *testing.T, store *session.Store) *httptest.Server {
 	t.Helper()
 	h := api.New(api.Options{
-		SessionStore:      store,
-		OperationStates:   models.NewOperationStates(),
-		SPA:               nil,
-		InventoryWriter:   config.NewInventoryWriter(),
-		EMInventoryWriter: config.NewEMInventoryWriter(),
-		EMInventoryPath:   emInvPath,
+		SessionStore:    store,
+		OperationStates: models.NewOperationStates(),
+		SPA:             nil,
+		InventoryWriter: config.NewInventoryWriter(),
 	})
 	return httptest.NewServer(h)
 }
@@ -120,7 +117,7 @@ func newInventoryServer(t *testing.T, store *session.Store, emInvPath string) *h
 func TestInventoryHandler_GetEmpty(t *testing.T) {
 	chdirTemp(t)
 	store := session.New("en")
-	srv := newInventoryServer(t, store, "")
+	srv := newInventoryServer(t, store)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/api/inventory")
@@ -151,7 +148,7 @@ func TestInventoryHandler_GetEmpty(t *testing.T) {
 func TestInventoryHandler_PutWritesFileAndUpdatesSession(t *testing.T) {
 	dir := chdirTemp(t)
 	store := session.New("en")
-	srv := newInventoryServer(t, store, "")
+	srv := newInventoryServer(t, store)
 	defer srv.Close()
 
 	payload := models.InventoryData{
@@ -208,7 +205,7 @@ func TestInventoryHandler_PutWritesFileAndUpdatesSession(t *testing.T) {
 func TestInventoryHandler_PutPreservesDynamicNodes(t *testing.T) {
 	chdirTemp(t)
 	store := session.New("en")
-	srv := newInventoryServer(t, store, "")
+	srv := newInventoryServer(t, store)
 	defer srv.Close()
 
 	// Seed the session with backend-managed dynamic nodes.
@@ -236,53 +233,10 @@ func TestInventoryHandler_PutPreservesDynamicNodes(t *testing.T) {
 	}
 }
 
-// TestInventoryHandler_PutPatchesEMAzLocations verifies that PUT also
-// refreshes ydb_em_az_locations in 90-inventory.yaml when it exists.
-func TestInventoryHandler_PutPatchesEMAzLocations(t *testing.T) {
-	dir := chdirTemp(t)
-	emPath := filepath.Join(dir, "90-inventory.yaml")
-
-	emWriter := config.NewEMInventoryWriter()
-	err := emWriter.WriteWithPatch(emPath, &models.EMConfig{
-		Hosts: []models.EMHost{{FQDN: "em-1.example.com"}},
-	})
-	if err != nil {
-		t.Fatalf("failed to seed 90-inventory: %v", err)
-	}
-
-	store := session.New("en")
-	srv := newInventoryServer(t, store, emPath)
-	defer srv.Close()
-
-	// Two DCs populated → AZ list must derive exactly two locations.
-	resp := putJSON(t, srv.URL+"/api/inventory", models.InventoryData{
-		DC1: []string{"node-a.example.com"},
-		DC2: []string{"node-b.example.com"},
-	})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-
-	parsed, err := config.NewEMInventoryService().Parse(emPath)
-	if err != nil {
-		t.Fatalf("failed to re-parse 90-inventory: %v", err)
-	}
-	want := []string{"dc-1", "dc-2"}
-	if len(parsed.AZLocations) != len(want) {
-		t.Fatalf("az_locations = %v, want %v", parsed.AZLocations, want)
-	}
-	for i := range want {
-		if parsed.AZLocations[i] != want[i] {
-			t.Errorf("az_locations[%d] = %q, want %q", i, parsed.AZLocations[i], want[i])
-		}
-	}
-}
-
 func TestInventoryHandler_PutMalformedJSON(t *testing.T) {
 	chdirTemp(t)
 	store := session.New("en")
-	srv := newInventoryServer(t, store, "")
+	srv := newInventoryServer(t, store)
 	defer srv.Close()
 
 	resp := putRaw(t, srv.URL+"/api/inventory", "{not-json")
@@ -302,7 +256,7 @@ func TestInventoryHandler_PutMalformedJSON(t *testing.T) {
 func TestInventoryHandler_MethodNotAllowed(t *testing.T) {
 	chdirTemp(t)
 	store := session.New("en")
-	srv := newInventoryServer(t, store, "")
+	srv := newInventoryServer(t, store)
 	defer srv.Close()
 
 	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/inventory", nil)

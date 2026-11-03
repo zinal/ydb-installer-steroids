@@ -15,7 +15,6 @@ interface State {
     loaded: boolean
     inventoryFound: boolean
     configFound: boolean
-    showEmStep: boolean
     configGenerated: boolean
     hydrated: boolean
     beforeNext: (() => Promise<boolean>) | null
@@ -39,7 +38,6 @@ export const useSessionStore = defineStore('session', {
         loaded: false,
         inventoryFound: false,
         configFound: false,
-        showEmStep: false,
         configGenerated: false,
         hydrated: false,
         beforeNext: null,
@@ -50,16 +48,9 @@ export const useSessionStore = defineStore('session', {
             return flowSteps(state.flow)
         },
 
-        /**
-         * Filtered step list for sidebar / footer navigation.
-         * Excludes EM-only steps (7.1 settings, 9.1 EM install) when
-         * showEmStep is false.
-         */
+        /** Step list for sidebar / footer navigation. */
         visibleFlowSteps(): FlowStep[] {
-            return this.flowStepList.filter((s) => {
-                if (s.id === '7.1') return this.showEmStep
-                return true
-            })
+            return this.flowStepList
         },
 
         sidebarItems(): SidebarItem[] {
@@ -77,9 +68,7 @@ export const useSessionStore = defineStore('session', {
          * 1-based position of the current step within the visible flow —
          * the sequential number shown to the user (ScreenEyebrow pill).
          * Derived from `visibleFlowSteps`, the same source the sidebar and
-         * footer use, so all indicators always agree. Falls back to the
-         * unfiltered flow list when the current step is filtered out
-         * (e.g. user stands on 7.1 while `showEmStep` is false).
+         * footer use, so all indicators always agree.
          */
         currentStepNumber(state): number {
             const idx = this.visibleFlowSteps.findIndex((s) => s.id === state.currentStep)
@@ -138,7 +127,6 @@ export const useSessionStore = defineStore('session', {
               }
               this.visited.add(this.currentStep)
 
-              this.showEmStep = s.ui_state.show_em_step
               this.configGenerated = s.ui_state.config_generated
           } else {
               // Backend has no ui_state yet (fresh server, e.g. first ever run) —
@@ -155,7 +143,6 @@ export const useSessionStore = defineStore('session', {
               current_step: this.currentStep,
               visited: Array.from(this.visited),
               errored: Array.from(this.errored),
-              show_em_step: this.showEmStep,
               config_generated: this.configGenerated,
           }
       },
@@ -197,10 +184,6 @@ export const useSessionStore = defineStore('session', {
 
       setBeforeNext(fn: (() => Promise<boolean>) | null) {
             this.beforeNext = fn
-        },
-
-      setShowEmStep(v: boolean) {
-            this.showEmStep = v
         },
 
       setConfigGenerated(v: boolean) {

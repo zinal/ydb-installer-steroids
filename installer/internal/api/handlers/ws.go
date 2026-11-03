@@ -56,7 +56,7 @@ const (
 // log streams are completely isolated.
 func LogsWebSocket(states *models.OperationStates, store *session.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Optional ?op=<flow> overrides session flow (ydb-flow EM phase).
+		// Optional ?op=<flow> overrides the session flow.
 		state := resolveInstallState(states, store, r)
 		if state == nil || state.Broadcaster == nil {
 			http.Error(w, "no active flow or broadcaster not available", http.StatusServiceUnavailable)

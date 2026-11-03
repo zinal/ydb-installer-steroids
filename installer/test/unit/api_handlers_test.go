@@ -70,8 +70,8 @@ func TestPutSession_FlowSwitch(t *testing.T) {
 	if got.Flow != models.FlowYDB {
 		t.Errorf("flow = %q, want ydb", got.Flow)
 	}
-	if len(got.Steps) != 11 {
-		t.Errorf("ydb flow should have 11 steps, got %d", len(got.Steps))
+	if len(got.Steps) != 10 {
+		t.Errorf("ydb flow should have 10 steps, got %d", len(got.Steps))
 	}
 }
 
@@ -84,7 +84,6 @@ func TestPutSession_UIStateRoundTrip(t *testing.T) {
 			"current_step":     "5",
 			"visited":          []string{"1", "2", "3", "4", "5"},
 			"errored":          []string{"3"},
-			"show_em_step":     true,
 			"config_generated": false,
 		},
 	}
@@ -112,8 +111,8 @@ func TestPutSession_UIStateRoundTrip(t *testing.T) {
 	if len(got.UIState.Visited) != 5 {
 		t.Errorf("ui_state.visited len = %d, want 5", len(got.UIState.Visited))
 	}
-	if !got.UIState.ShowEMStep {
-		t.Error("ui_state.show_em_step should be true")
+	if got.UIState.ConfigGenerated {
+		t.Error("ui_state.config_generated should be false")
 	}
 
 	// GET must return the same state — verifying it's actually persisted, not
@@ -182,8 +181,8 @@ func TestSession_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-// TestSystemDeps verifies the /api/system/deps endpoint returns 4 dependencies
-// (python, ansible, ydb_platform.ydb, ydb_platform.ydb_em).
+// TestSystemDeps verifies the /api/system/deps endpoint returns 3 dependencies
+// (python, ansible, ydb_platform.ydb).
 // The real DepsChecker is used — it probes the system, so we only check shape.
 func TestSystemDeps_Shape(t *testing.T) {
 	srv := newTestServer(t)
@@ -208,12 +207,12 @@ func TestSystemDeps_Shape(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Dependencies) != 4 {
-		t.Errorf("expected 4 deps, got %d", len(got.Dependencies))
+	if len(got.Dependencies) != 3 {
+		t.Errorf("expected 3 deps, got %d", len(got.Dependencies))
 	}
 	wantNames := map[string]bool{
 		"python": false, "ansible": false,
-		"ydb_platform.ydb": false, "ydb_platform.ydb_em": false,
+		"ydb_platform.ydb": false,
 	}
 	for _, d := range got.Dependencies {
 		if _, ok := wantNames[d.Name]; ok {

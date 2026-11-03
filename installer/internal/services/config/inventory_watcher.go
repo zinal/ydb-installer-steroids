@@ -92,7 +92,7 @@ func (fw *InventoryFileWatcher) watchLoop() {
 				return
 			}
 			baseName := filepath.Base(event.Name)
-			if event.Name == fw.filePath || baseName == "50-inventory.yaml" || baseName == "90-inventory.yaml" {
+			if event.Name == fw.filePath || baseName == "50-inventory.yaml" {
 				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 {
 					fw.notifyListeners()
 				}

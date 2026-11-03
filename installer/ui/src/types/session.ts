@@ -1,4 +1,4 @@
-export type Flow = '' | 'ydb' | 'ydb-em' | 'delete-ydb' | 'delete-em-ydb'
+export type Flow = '' | 'ydb' | 'delete-ydb'
 
 export type StepStatus =
   | 'active'
@@ -23,7 +23,6 @@ export interface UIState {
   current_step: string
   visited: string[]
   errored: string[]
-  show_em_step: boolean
   config_generated: boolean
 }
 

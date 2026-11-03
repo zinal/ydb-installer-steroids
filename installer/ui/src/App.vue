@@ -12,14 +12,13 @@
 //   4. `useSessionSync()` / `usePersistedState()` subscriptions start watching
 //      for further local mutations and mirror them back (debounced) to the
 //      backend / sessionStorage respectively.
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted } from 'vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import { useSessionStore } from '@/stores/session'
 import { setLocale } from '@/plugins/i18n'
 import { useInventorySync } from '@/composables/useInventorySync'
-import { useEMInventorySync } from '@/composables/useEMInventorySync'
 import { useSessionSync } from '@/composables/useSessionSync'
 import { usePersistedState } from '@/composables/usePersistedState'
 import { useDisksStore } from '@/stores/disks'
@@ -28,48 +27,15 @@ import { useDistributionStore } from '@/stores/distribution'
 import { useDatabasesStore } from '@/stores/databases'
 import { useHostsStore } from '@/stores/hosts'
 import { useYdbConfigStore } from '@/stores/ydbConfig'
-import { useEmStore } from '@/stores/em'
 import { useConnectivityStore } from '@/stores/connectivity'
 import { useUiStore } from '@/stores/ui'
 import { useRuntimeStore } from '@/stores/runtime'
-import { deriveEmAzLocations } from '@/utils/emAzLocations'
-import { api } from '@/api/client'
 
 const session = useSessionStore()
 const runtime = useRuntimeStore()
 const connectivity = useConnectivityStore()
 
-// EM AZ bridge: when YDB DC hosts change and EM inventory already exists,
-// refresh ydb_em_az_locations in 90-inventory.yaml automatically.
-// Screen-level useEMInventorySync handles the EM-flow writes (Screens 20/21);
-// this subscription covers host edits on Screen 3 while EM inventory is present.
-const emStore = useEmStore()
-const hostsStore = useHostsStore()
-let hostsDebounce: ReturnType<typeof setTimeout> | null = null
-const unsubHosts = hostsStore.$subscribe(() => {
-  if (!emStore.emInventoryFound) return
-  if (hostsDebounce) clearTimeout(hostsDebounce)
-  hostsDebounce = setTimeout(async () => {
-    try {
-      await api.updateEMInventory({
-        ...emStore.toEMConfig(),
-        az_locations: deriveEmAzLocations(hostsStore.dcHosts),
-      })
-    } catch {
-    }
-  }, 500)
-})
-api.getEMInventory().then((resp) => {
-  emStore.setEMInventoryFound(resp.em_inventory_found)
-  if (resp.data) emStore.applyFromEMConfig(resp.data)
-}).catch(() => {})
-onUnmounted(() => {
-  unsubHosts()
-  if (hostsDebounce) clearTimeout(hostsDebounce)
-})
-
 useInventorySync()
-useEMInventorySync()
 useSessionSync()
 
 usePersistedState(useDisksStore(), {
@@ -83,19 +49,6 @@ usePersistedState(useTlsStore(), {
 usePersistedState(useDistributionStore(), {
   name: 'distribution',
   paths: ['archiveValid', 'archiveSize'],
-})
-usePersistedState(useEmStore(), {
-  name: 'em',
-  paths: [
-    'distMode',
-    'archivePath', 'metaUIArchivePath',
-    'metaUIBinary', 'cpBinary', 'cpAgentBinary',
-    'archiveValid', 'archiveSize',
-    'metaUIArchiveValid', 'metaUIArchiveSize',
-    'metaUIBinaryValid', 'metaUIBinarySize',
-    'cpBinaryValid', 'cpBinarySize',
-    'cpAgentBinaryValid', 'cpAgentBinarySize',
-  ],
 })
 usePersistedState(useDatabasesStore(), {
   name: 'databases',

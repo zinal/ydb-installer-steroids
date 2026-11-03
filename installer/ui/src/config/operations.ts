@@ -21,7 +21,7 @@ export interface OperationDescriptor {
  * Typing these keys as required (not Partial) lets callers index OPERATIONS
  * directly without a null check.
  */
-export type OperationFlow = 'ydb' | 'ydb-em' | 'delete-ydb' | 'delete-em-ydb'
+export type OperationFlow = 'ydb' | 'delete-ydb'
 
 export const OPERATIONS: Record<OperationFlow, OperationDescriptor> = {
   'ydb': {
@@ -30,22 +30,10 @@ export const OPERATIONS: Record<OperationFlow, OperationDescriptor> = {
     resultStep: '10',
     i18nPrefix: 'install',
   },
-  'ydb-em': {
-    startEndpoint: '/api/install/ydb-em/start',
-    progressStep: '24',
-    resultStep: '25',
-    i18nPrefix: 'emInstall',
-  },
   'delete-ydb': {
     startEndpoint: '/api/install/delete-ydb/start',
     progressStep: '31',
     resultStep: '31',
-    i18nPrefix: 'delete',
-  },
-  'delete-em-ydb': {
-    startEndpoint: '/api/install/delete-em-ydb/start',
-    progressStep: '33',
-    resultStep: '33',
     i18nPrefix: 'delete',
   },
 }
@@ -54,4 +42,3 @@ export const OPERATIONS: Record<OperationFlow, OperationDescriptor> = {
 export function operationFor(flow: Flow): OperationDescriptor | undefined {
   return (OPERATIONS as Record<string, OperationDescriptor | undefined>)[flow]
 }
-

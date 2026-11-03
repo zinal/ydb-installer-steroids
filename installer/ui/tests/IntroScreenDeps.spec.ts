@@ -56,7 +56,7 @@ describe('IntroScreen Dependency Integration', () => {
 
       await session.setFlow('delete-ydb')
 
-      const isDeleteFlow = session.flow === 'delete-ydb' || session.flow === 'delete-em-ydb'
+      const isDeleteFlow = session.flow === 'delete-ydb'
       if (isDeleteFlow) {
         session.setCanGoNext(canProceed.value)
       }
@@ -65,31 +65,6 @@ describe('IntroScreen Dependency Integration', () => {
       expect(session.canGoNext).toBe(false)
     })
 
-    it('disables Next button when delete-em-ydb flow selected with missing dependencies', async () => {
-      vi.mocked(api.getDeps).mockResolvedValue({ dependencies: mockDeps })
-      vi.mocked(api.getSession).mockResolvedValue({
-        flow: '',
-        current_step: '1',
-        steps: [],
-        default_lang: 'en',
-      })
-
-      const session = useSessionStore()
-      await session.load()
-
-      const { canProceed, fetchDeps } = useDeps()
-      await fetchDeps()
-
-      await session.setFlow('delete-em-ydb')
-
-      const isDeleteFlow = session.flow === 'delete-ydb' || session.flow === 'delete-em-ydb'
-      if (isDeleteFlow) {
-        session.setCanGoNext(canProceed.value)
-      }
-
-      expect(canProceed.value).toBe(false)
-      expect(session.canGoNext).toBe(false)
-    })
 
     it('enables Next button when delete-ydb flow selected with all dependencies satisfied', async () => {
       vi.mocked(api.getDeps).mockResolvedValue({ dependencies: mockAllOkDeps })
@@ -108,7 +83,7 @@ describe('IntroScreen Dependency Integration', () => {
 
       await session.setFlow('delete-ydb')
 
-      const isDeleteFlow = session.flow === 'delete-ydb' || session.flow === 'delete-em-ydb'
+      const isDeleteFlow = session.flow === 'delete-ydb'
       if (isDeleteFlow) {
         session.setCanGoNext(canProceed.value)
       }
@@ -139,7 +114,7 @@ describe('IntroScreen Dependency Integration', () => {
       skipDep('ansible')
       skipDep('ydb_platform.ydb')
 
-      const isDeleteFlow = session.flow === 'delete-ydb' || session.flow === 'delete-em-ydb'
+      const isDeleteFlow = session.flow === 'delete-ydb'
       if (isDeleteFlow) {
         session.setCanGoNext(canProceed.value)
       }
@@ -167,7 +142,7 @@ describe('IntroScreen Dependency Integration', () => {
 
       await session.setFlow('ydb')
 
-      const isDeleteFlow = session.flow === 'delete-ydb' || session.flow === 'delete-em-ydb'
+      const isDeleteFlow = session.flow === 'delete-ydb'
       if (!isDeleteFlow) {
         session.setCanGoNext(true)
       }
@@ -176,31 +151,6 @@ describe('IntroScreen Dependency Integration', () => {
       expect(session.canGoNext).toBe(true)
     })
 
-    it('always enables Next button for ydb-em install flow regardless of dependencies', async () => {
-      vi.mocked(api.getDeps).mockResolvedValue({ dependencies: mockDeps })
-      vi.mocked(api.getSession).mockResolvedValue({
-        flow: '',
-        current_step: '1',
-        steps: [],
-        default_lang: 'en',
-      })
-
-      const session = useSessionStore()
-      await session.load()
-
-      const { canProceed, fetchDeps } = useDeps()
-      await fetchDeps()
-
-      await session.setFlow('ydb-em')
-
-      const isDeleteFlow = session.flow === 'delete-ydb' || session.flow === 'delete-em-ydb'
-      if (!isDeleteFlow) {
-        session.setCanGoNext(true)
-      }
-
-      expect(canProceed.value).toBe(false)
-      expect(session.canGoNext).toBe(true)
-    })
   })
 
   describe('No Flow Selected', () => {
@@ -221,7 +171,7 @@ describe('IntroScreen Dependency Integration', () => {
 
       expect(session.flow).toBe('')
 
-      const isDeleteFlow = session.flow === 'delete-ydb' || session.flow === 'delete-em-ydb'
+      const isDeleteFlow = session.flow === 'delete-ydb'
       if (!isDeleteFlow) {
         session.setCanGoNext(true)
       }
@@ -247,14 +197,14 @@ describe('IntroScreen Dependency Integration', () => {
       await fetchDeps()
 
       await session.setFlow('ydb')
-      let isDeleteFlow = session.flow === 'delete-ydb' || session.flow === 'delete-em-ydb'
+      let isDeleteFlow = session.flow === 'delete-ydb'
       if (!isDeleteFlow) {
         session.setCanGoNext(true)
       }
       expect(session.canGoNext).toBe(true)
 
       await session.setFlow('delete-ydb')
-      isDeleteFlow = session.flow === 'delete-ydb' || session.flow === 'delete-em-ydb'
+      isDeleteFlow = session.flow === 'delete-ydb'
       if (isDeleteFlow) {
         session.setCanGoNext(canProceed.value)
       }
@@ -277,14 +227,14 @@ describe('IntroScreen Dependency Integration', () => {
       await fetchDeps()
 
       await session.setFlow('delete-ydb')
-      let isDeleteFlow = session.flow === 'delete-ydb' || session.flow === 'delete-em-ydb'
+      let isDeleteFlow = session.flow === 'delete-ydb'
       if (isDeleteFlow) {
         session.setCanGoNext(canProceed.value)
       }
       expect(session.canGoNext).toBe(false)
 
       await session.setFlow('ydb')
-      isDeleteFlow = session.flow === 'delete-ydb' || session.flow === 'delete-em-ydb'
+      isDeleteFlow = session.flow === 'delete-ydb'
       if (!isDeleteFlow) {
         session.setCanGoNext(true)
       }
@@ -322,41 +272,7 @@ describe('IntroScreen Dependency Integration', () => {
     })
   })
 
-  describe('EM flow selection', () => {
-    it('allows ydb-em flow selection', async () => {
-      vi.mocked(api.getDeps).mockResolvedValue({ dependencies: mockAllOkDeps })
-      vi.mocked(api.getSession).mockResolvedValue({
-        flow: '',
-        current_step: '1',
-        steps: [],
-        default_lang: 'en',
-      })
-
-      const session = useSessionStore()
-      await session.load()
-
-      await session.setFlow('ydb-em')
-      expect(session.flow).toBe('ydb-em')
-    })
-
-    it('allows delete-em-ydb flow when EM inventory is present', async () => {
-      vi.mocked(api.getDeps).mockResolvedValue({ dependencies: mockAllOkDeps })
-      vi.mocked(api.getSession).mockResolvedValue({
-        flow: '',
-        current_step: '1',
-        steps: [],
-        default_lang: 'en',
-      })
-
-      const session = useSessionStore()
-      await session.load()
-
-      const canSelectDeleteEm = true
-      expect(canSelectDeleteEm).toBe(true)
-      await session.setFlow('delete-em-ydb')
-      expect(session.flow).toBe('delete-em-ydb')
-    })
-
+  describe('flow selection', () => {
     it('allows ydb install flow', async () => {
       vi.mocked(api.getDeps).mockResolvedValue({ dependencies: mockAllOkDeps })
       vi.mocked(api.getSession).mockResolvedValue({

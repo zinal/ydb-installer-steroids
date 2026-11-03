@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Step number is sequential per flow (from visibleFlowSteps), never the
-// design-doc screen ID — so it shifts when 7.1 is inserted in the ydb flow.
+// design-doc screen ID.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSessionStore } from '@/stores/session'
@@ -17,11 +17,9 @@ const { t } = useI18n()
 
 const flowLabel = computed(() => {
   switch (session.flow) {
-    case 'ydb':           return 'YDB'
-    case 'ydb-em':        return 'YDB EM'
-    case 'delete-ydb':    return t('intro.deleteYdb')
-    case 'delete-em-ydb': return t('intro.deleteEmYdb')
-    default:              return ''
+    case 'ydb':        return 'YDB'
+    case 'delete-ydb': return t('intro.deleteYdb')
+    default:           return ''
   }
 })
 </script>

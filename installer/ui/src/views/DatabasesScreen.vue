@@ -7,9 +7,6 @@ import { useSessionStore } from '@/stores/session'
 import { useDatabasesStore, type ConfigVariant, type DatabaseEntryUI } from '@/stores/databases'
 import { useHostsStore } from '@/stores/hosts'
 import { useTopologyStore } from '@/stores/topology'
-import { useYdbConfigStore } from '@/stores/ydbConfig'
-import { useEmStore } from '@/stores/em'
-import { useRuntimeStore } from '@/stores/runtime'
 import { HELP_LINKS } from '@/config/helpLinks'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import ScreenEyebrow from '@/components/common/ScreenEyebrow.vue'
@@ -17,9 +14,6 @@ import ScreenEyebrow from '@/components/common/ScreenEyebrow.vue'
 const session = useSessionStore()
 const db = useDatabasesStore()
 const hosts = useHostsStore()
-const ydbConfig = useYdbConfigStore()
-const emStore = useEmStore()
-const runtime = useRuntimeStore()
 const { t } = useI18n()
 const topologyStore = useTopologyStore()
 
@@ -30,15 +24,6 @@ const hostCount = computed(() => {
     ...hosts.dcHosts['DC-3'],
   ]
   return Math.max(allHosts.filter((h: string) => h.trim() !== '').length, 1)
-})
-
-const allHostList = computed(() => {
-  const allHosts = [
-    ...hosts.dcHosts['DC-1'],
-    ...hosts.dcHosts['DC-2'],
-    ...hosts.dcHosts['DC-3'],
-  ]
-  return allHosts.filter((h: string) => h.trim() !== '')
 })
 
 const coresInfo = useCoresInfo()
@@ -135,58 +120,6 @@ function handleAddCustomHost(index: number) {
   customHostInput.value[index] = ''
 }
 
-watch(() => db.configVariant, (variant) => {
-  session.setShowEmStep(variant === 'single-plus-em')
-}, { immediate: true })
-
-watch(
-  () => [runtime.showEmScenarios, db.configVariant] as const,
-  ([showEm, variant]) => {
-    if (variant === 'single-plus-em' && !showEm) db.setConfigVariant('single')
-  },
-  { immediate: true },
-)
-
-function firstYdbHost(): string {
-  return allHostList.value[0] ?? ''
-}
-
-function normalizeDomainRoot(domain: string): string {
-  const d = domain.trim().replace(/^\/+|\/+$/g, '')
-  return d ? `/${d}` : '/Root'
-}
-
-watch(
-  () => [
-    db.configVariant,
-    db.entries[1]?.name,
-    ydbConfig.domain,
-    allHostList.value.join('\0'),
-  ] as const,
-  () => {
-    if (db.configVariant !== 'single-plus-em') return
-
-    const emName = (db.entries[1]?.name ?? '').trim()
-    const root = normalizeDomainRoot(ydbConfig.domain || 'Root')
-    const host = firstYdbHost()
-
-    emStore.useDynamicConfig = true
-    if (emName) emStore.setDbConnectionDB(emName)
-    emStore.setDbConnectionDBRoot(root)
-    if (host) {
-      emStore.setDbConnectionEndpoint(`grpcs://${host}:2135`)
-    }
-    const hasEmHost = emStore.hosts.some(h => h.fqdn.trim() !== '')
-    if (!hasEmHost && host) {
-      if (emStore.hosts.length === 0) {
-        emStore.addEmptyHost()
-      }
-      emStore.updateHost(0, host)
-    }
-  },
-  { immediate: true },
-)
-
 watch(() => [db.canProceed, coresExceeded.value], () => {
   session.setCanGoNext(db.canProceed && !coresExceeded.value)
 }, { immediate: true })
@@ -222,15 +155,6 @@ watch(() => [db.canProceed, coresExceeded.value], () => {
             @click="setVariant('multiple')"
           >
             <span class="radio-label">{{ t('databases.variantMultiple') }}</span>
-          </button>
-          <button
-            v-if="runtime.showEmScenarios"
-            type="button"
-            class="radio-option variant-option"
-            :class="{ 'is-active': db.configVariant === 'single-plus-em' }"
-            @click="setVariant('single-plus-em')"
-          >
-            <span class="radio-label">{{ t('databases.variantSinglePlusEm') }}</span>
           </button>
         </div>
       </v-card>
@@ -380,140 +304,6 @@ watch(() => [db.canProceed, coresExceeded.value], () => {
               </div>
             </div>
           </v-expand-transition>
-        </div>
-      </v-card>
-    </section>
-
-    <section v-else-if="db.configVariant === 'single-plus-em'" class="config-section">
-      <div class="multiple-mode-hint">
-        <v-icon icon="mdi-information-outline" size="15" class="mr-1" />
-        {{ t('databases.singlePlusEmHint') }}
-      </div>
-
-      <v-card v-if="db.entries[0]" class="config-card">
-        <div class="card-header db-card-header">
-          <span class="section-eyebrow">{{ t('databases.userDbLabel') }}</span>
-        </div>
-
-        <div class="field-group">
-          <label class="field-label">
-            {{ t('databases.dbName') }}
-            <HelpTooltip text-key="help.dbName" :doc-link="HELP_LINKS.dbName" />
-            <span class="required-mark">*</span>
-          </label>
-          <v-text-field
-            :model-value="db.entries[0].name"
-            @update:model-value="(v: string) => updateEntryName(0, v)"
-            :placeholder="t('databases.dbNamePlaceholder')"
-            density="compact"
-            variant="outlined"
-            hide-details="auto"
-            class="text-input"
-          />
-          <div v-if="!db.entries[0].name.trim()" class="validation-hint is-error">
-            <v-icon icon="mdi-alert-circle" size="14" color="error" class="mr-1" />
-            {{ t('databases.dbNameRequired') }}
-          </div>
-          <div v-else-if="isDuplicateName(db.entries[0].name)" class="validation-hint is-error">
-            <v-icon icon="mdi-alert-circle" size="14" color="error" class="mr-1" />
-            {{ t('databases.dbNameDuplicate') }}
-          </div>
-        </div>
-
-        <div class="field-group">
-          <label class="field-label">
-            {{ t('databases.groups') }}
-            <HelpTooltip text-key="help.dbGroups" :doc-link="HELP_LINKS.dbGroups" />
-          </label>
-          <v-text-field
-            :model-value="db.entries[0].groups"
-            @update:model-value="(v: string) => updateEntryGroups(0, v)"
-            density="compact"
-            variant="outlined"
-            hide-details="auto"
-            type="number"
-            :min="1"
-            class="text-input"
-          />
-        </div>
-
-        <div class="field-group field-group--last">
-          <label class="field-label">{{ t('databases.hosts') }}</label>
-          <div class="radio-row">
-            <button
-              type="button"
-              class="radio-option"
-              :class="{ 'is-active': db.entries[0].hostMode === 'all' }"
-              @click="updateEntryHostMode(0, 'all')"
-            >
-              <span class="radio-label">{{ t('databases.hostsAll') }}</span>
-            </button>
-          </div>
-          <div class="field-hint">
-            {{ t('databases.allHostsHint', { count: hostCount }) }}
-          </div>
-        </div>
-      </v-card>
-
-      <v-card v-if="db.entries[1]" class="config-card">
-        <div class="card-header db-card-header">
-          <span class="section-eyebrow">{{ t('databases.emDbLabel') }}</span>
-          <span class="em-badge">{{ t('databases.emDbBadge') }}</span>
-        </div>
-
-        <div class="field-group">
-          <label class="field-label">
-            {{ t('databases.dbName') }}
-            <HelpTooltip text-key="help.dbName" :doc-link="HELP_LINKS.dbName" />
-            <span class="required-mark">*</span>
-          </label>
-          <v-text-field
-            :model-value="db.entries[1].name"
-            disabled
-            density="compact"
-            variant="outlined"
-            hide-details="auto"
-            class="text-input"
-          />
-          <div v-if="isDuplicateName(db.entries[1].name)" class="validation-hint is-error">
-            <v-icon icon="mdi-alert-circle" size="14" color="error" class="mr-1" />
-            {{ t('databases.dbNameDuplicate') }}
-          </div>
-          <div class="field-hint">{{ t('databases.emDbHint') }}</div>
-        </div>
-
-        <div class="field-group">
-          <label class="field-label">
-            {{ t('databases.groups') }}
-            <HelpTooltip text-key="help.dbGroups" :doc-link="HELP_LINKS.dbGroups" />
-          </label>
-          <v-text-field
-            :model-value="db.entries[1].groups"
-            @update:model-value="(v: string) => updateEntryGroups(1, v)"
-            density="compact"
-            variant="outlined"
-            hide-details="auto"
-            type="number"
-            :min="1"
-            class="text-input"
-          />
-        </div>
-
-        <div class="field-group field-group--last">
-          <label class="field-label">{{ t('databases.hosts') }}</label>
-          <div class="radio-row">
-            <button
-              type="button"
-              class="radio-option"
-              :class="{ 'is-active': db.entries[1].hostMode === 'all' }"
-              @click="updateEntryHostMode(1, 'all')"
-            >
-              <span class="radio-label">{{ t('databases.hostsAll') }}</span>
-            </button>
-          </div>
-          <div class="field-hint">
-            {{ t('databases.allHostsHint', { count: hostCount }) }}
-          </div>
         </div>
       </v-card>
     </section>
@@ -782,19 +572,6 @@ watch(() => [db.canProceed, coresExceeded.value], () => {
 }
 .text-input {
   max-width: 520px;
-}
-
-.em-badge {
-  display: inline-flex;
-  align-items: center;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #1f6dd9;
-  background: #eef4ff;
-  border-radius: 999px;
-  padding: 3px 10px;
 }
 
 .variant-row {

@@ -19,8 +19,7 @@ const inventoryPath = "inventory/50-inventory.yaml"
 //
 //   - GET  → returns the current inventory data from the session.
 //   - PUT  → applies inventory updates, writes to file, and updates session.
-//     If 90-inventory exists, also patches ydb_em_az_locations.
-func Inventory(store *session.Store, writer *config.InventoryWriter, emWriter *config.EMInventoryWriter, emInvPath string) http.HandlerFunc {
+func Inventory(store *session.Store, writer *config.InventoryWriter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -64,12 +63,6 @@ func Inventory(store *session.Store, writer *config.InventoryWriter, emWriter *c
 			invService := config.NewInventoryService()
 			if parsed, err := invService.Parse(fullPath); err == nil && len(parsed.DynamicNodes) > 0 {
 				data.DynamicNodes = parsed.DynamicNodes
-			}
-
-			// If 90-inventory exists, refresh ydb_em_az_locations from the DC hosts.
-			if emWriter != nil && emInvPath != "" {
-				azLocs := config.DeriveAZFromDCs(data.DC1, data.DC2, data.DC3)
-				_ = emWriter.PatchAZLocations(emInvPath, azLocs)
 			}
 
 			store.UpdateInventory(&data, true, true)

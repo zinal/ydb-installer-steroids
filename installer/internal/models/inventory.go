@@ -34,30 +34,6 @@ type AnsibleInventory struct {
 	} `yaml:"all"`
 }
 
-// EMAnsibleInventory mirrors 90-inventory.yaml for parsing only.
-//
-// ydbd_static / ydbd_dynamic are owned exclusively by 50-inventory.yaml and
-// are NEVER written into 90-inventory.yaml. The YdbDynamic field is retained
-// only for backward-compatible parsing of legacy 90 files that may still
-// contain it.
-type EMAnsibleInventory struct {
-	All struct {
-		Children struct {
-			YDB struct {
-				Vars     map[string]interface{} `yaml:"vars,omitempty"`
-				Children struct {
-					YdbEM      EMGroup `yaml:"ydb_em"`
-					YdbDynamic EMGroup `yaml:"ydbd_dynamic"`
-				} `yaml:"children,omitempty"`
-			} `yaml:"ydb"`
-		} `yaml:"children"`
-	} `yaml:"all"`
-}
-
-type EMGroup struct {
-	Hosts map[string]map[string]interface{} `yaml:"hosts,omitempty"`
-}
-
 type InventoryData struct {
 	Hosts        []string            `json:"hosts,omitempty"`
 	DC1          []string            `json:"dc1,omitempty"`
@@ -184,46 +160,4 @@ type OperationsConfig struct {
 
 type TopologyConfig struct {
 	Type string `json:"type"`
-}
-
-type EMHost struct {
-	FQDN     string `json:"fqdn"`
-	Location string `json:"location,omitempty"`
-}
-
-// EMConfig is written to 90-inventory.yaml separately from 50-inventory.yaml.
-// SSH and ydb_user/ydb_password are inherited from 50-inventory.yaml and not
-// duplicated here.
-type EMConfig struct {
-	Hosts []EMHost `json:"hosts,omitempty"`
-
-	ClusterName string `json:"cluster_name,omitempty"`
-
-	DbConnectionDBRoot string `json:"db_connection_db_root,omitempty"`
-	DbConnectionDB     string `json:"db_connection_db,omitempty"`
-	// DbConnectionEndpoint is grpcs://host:2135. When empty, writer derives it
-	// from the first EM host (ydb_em_frontend).
-	DbConnectionEndpoint string `json:"db_connection_endpoint,omitempty"`
-
-	ArchivePath   string `json:"archive_path,omitempty"`
-	MetaUIArchive string `json:"meta_ui_archive,omitempty"`
-
-	MetaUIBinary  string `json:"meta_ui_binary,omitempty"`
-	CPBinary      string `json:"cp_binary,omitempty"`
-	CPAgentBinary string `json:"cp_agent_binary,omitempty"`
-
-	AgentCPU    int `json:"agent_cpu,omitempty"`
-	AgentMemory int `json:"agent_memory,omitempty"`
-
-	AZLocations []string `json:"az_locations,omitempty"`
-
-	// NOTE: ydb_em_cp_presets is deliberately absent from this model. It is a
-	// file-level default injected via config.EmAlwaysPresentKeys so that user
-	// customisations in 90-inventory.yaml are never overwritten.
-
-	UseDynamicConfig bool `json:"use_dynamic_config,omitempty"`
-
-	// EmTLSCertPath is ydb_em_tls_dir — certs-per-host directory used by EM.
-	// When empty, playbooks may fall back to the shared YDB TLS dir.
-	EmTLSCertPath string `json:"em_tls_cert_path,omitempty"`
 }

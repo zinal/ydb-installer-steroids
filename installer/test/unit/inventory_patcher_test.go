@@ -1119,49 +1119,6 @@ func TestBuildDynamicNodes_Entry0MatchedByName(t *testing.T) {
 	}
 }
 
-func TestPatcher_EMNoDefaultsLeak(t *testing.T) {
-	raw := `all:
-  children:
-    ydb:
-      vars:
-        ydb_em_cluster_name: mycluster
-      children:
-        ydb_em:
-          hosts:
-            em-host1:
-        ydbd_dynamic:
-          hosts: {}
-`
-
-	managedVars := map[string]interface{}{
-		"ydb_em_cluster_name": "mycluster",
-		"ydb_em_frontend":     "em-host1",
-	}
-
-	patcher := config.NewInventoryPatcher()
-	patched, err := patcher.Patch([]byte(raw), managedVars, nil, config.EmAlwaysPresentKeys...)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	patchedStr := string(patched)
-
-	leakedKeys := []string{
-		"ydb_user:",
-		"system_timezone:",
-		"system_ntp_servers:",
-		"ydbops_local:",
-		"ydb_config:",
-		"ydb_skip_data_loss_confirmation_prompt:",
-	}
-
-	for _, key := range leakedKeys {
-		if strings.Contains(patchedStr, key) {
-			t.Errorf("YDB default %q leaked into EM inventory:\n%s", key, patchedStr)
-		}
-	}
-}
-
 func TestPatcher_YDBDefaultsApplied(t *testing.T) {
 	raw := `all:
   children:

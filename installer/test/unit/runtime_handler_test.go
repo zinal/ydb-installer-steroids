@@ -17,11 +17,11 @@ import (
 func newRuntimeTestServer(t *testing.T, info handlers.RuntimeInfo, bundled *checker.BundledInfo) *httptest.Server {
 	t.Helper()
 	h := api.New(api.Options{
-		SessionStore:     session.New("en"),
-		OperationStates:  models.NewOperationStates(),
-		SPA:              nil,
-		RuntimeInfo:      info,
-		BundledDeps:      bundled,
+		SessionStore:    session.New("en"),
+		OperationStates: models.NewOperationStates(),
+		SPA:             nil,
+		RuntimeInfo:     info,
+		BundledDeps:     bundled,
 	})
 	return httptest.NewServer(h)
 }
@@ -57,33 +57,6 @@ func TestSystemRuntime_Shape(t *testing.T) {
 	}
 	if got.Python != "3.12.5" || got.Ansible != "10.3.0" || got.Collection != "1.2.3" {
 		t.Errorf("version mismatch: %+v", got)
-	}
-	if got.ShowEMScenarios {
-		t.Error("expected show_em_scenarios to default false")
-	}
-}
-
-func TestSystemRuntime_ShowEMScenarios(t *testing.T) {
-	info := handlers.RuntimeInfo{
-		Embedded:        true,
-		Extracted:       true,
-		ShowEMScenarios: true,
-	}
-	srv := newRuntimeTestServer(t, info, nil)
-	defer srv.Close()
-
-	resp, err := http.Get(srv.URL + "/api/system/runtime")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	var got handlers.RuntimeInfo
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
-		t.Fatal(err)
-	}
-	if !got.ShowEMScenarios {
-		t.Error("expected show_em_scenarios true")
 	}
 }
 

@@ -35,39 +35,13 @@ describe('ScreenEyebrow', () => {
     expect(wrapper.find('.eyebrow-flow').text()).toBe('· YDB')
   })
 
-  it('shows sequential numbers in the ydb-em flow, not screen IDs', () => {
-    const session = useSessionStore()
-    // Screen 20 is the 2nd step of the ydb-em flow.
-    session.$patch({ flow: 'ydb-em', currentStep: '20' })
-
-    const wrapper = mountEyebrow()
-    expect(wrapper.find('.eyebrow-pill').text()).toBe('common.step 2')
-    expect(wrapper.find('.eyebrow-flow').text()).toBe('· YDB EM')
-  })
-
-  it('renumbers ydb steps after 7.1 when showEmStep is toggled', async () => {
-    const session = useSessionStore()
-    session.$patch({ flow: 'ydb', currentStep: '9', showEmStep: true })
-
-    const wrapper = mountEyebrow()
-    // With 7.1 inserted, screen 9 is the 10th visible step.
-    expect(wrapper.find('.eyebrow-pill').text()).toBe('common.step 10')
-
-    session.setShowEmStep(false)
-    await wrapper.vm.$nextTick()
-    expect(wrapper.find('.eyebrow-pill').text()).toBe('common.step 9')
-  })
-
-  it('shows sequential numbers and i18n flow labels in the delete flows', () => {
+  it('shows sequential numbers and the i18n flow label in the delete flow', () => {
     const session = useSessionStore()
 
     session.$patch({ flow: 'delete-ydb', currentStep: '31' })
-    expect(mountEyebrow().find('.eyebrow-pill').text()).toBe('common.step 3')
-
-    session.$patch({ flow: 'delete-em-ydb', currentStep: '33' })
     const wrapper = mountEyebrow()
     expect(wrapper.find('.eyebrow-pill').text()).toBe('common.step 3')
-    expect(wrapper.find('.eyebrow-flow').text()).toBe('· intro.deleteEmYdb')
+    expect(wrapper.find('.eyebrow-flow').text()).toBe('· intro.deleteYdb')
   })
 
   it('hides the flow label before any flow is chosen', () => {

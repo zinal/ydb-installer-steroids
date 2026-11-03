@@ -13,10 +13,6 @@ vi.mock('@/api/client', () => ({
 import DatabasesScreen from '@/views/DatabasesScreen.vue'
 import { useDatabasesStore } from '@/stores/databases'
 import { useSessionStore } from '@/stores/session'
-import { useHostsStore } from '@/stores/hosts'
-import { useYdbConfigStore } from '@/stores/ydbConfig'
-import { useEmStore } from '@/stores/em'
-import { useRuntimeStore } from '@/stores/runtime'
 
 const i18n = createI18n({
   legacy: false,
@@ -89,7 +85,7 @@ describe('DatabasesScreen', () => {
     setActivePinia(createPinia())
   })
 
-  it('renders the two non-EM variants without runtime flags', async () => {
+  it('renders the single and multiple variants', async () => {
     const wrapper = mountScreen()
     const db = useDatabasesStore()
     expect(variantButtons(wrapper)).toHaveLength(2)
@@ -101,51 +97,6 @@ describe('DatabasesScreen', () => {
 
     await variantButtons(wrapper)[0].trigger('click')
     expect(db.configVariant).toBe('single')
-  })
-
-  it('single-plus-em toggles session.showEmStep (step 7.1 visibility)', async () => {
-    const { api } = await import('@/api/client')
-    vi.mocked(api.getRuntimeInfo).mockResolvedValue({ embedded: true, extracted: true, show_em_scenarios: true })
-    await useRuntimeStore().load()
-
-    const wrapper = mountScreen()
-    const db = useDatabasesStore()
-    const session = useSessionStore()
-
-    expect(session.showEmStep).toBe(false)
-
-    db.setConfigVariant('single-plus-em')
-    await nextTick()
-    expect(session.showEmStep).toBe(true)
-
-    db.setConfigVariant('single')
-    await nextTick()
-    expect(session.showEmStep).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('single-plus-em seeds the EM store from YDB domain and first host', async () => {
-    const { api } = await import('@/api/client')
-    vi.mocked(api.getRuntimeInfo).mockResolvedValue({ embedded: true, extracted: true, show_em_scenarios: true })
-    await useRuntimeStore().load()
-
-    useHostsStore().dcHosts['DC-1'] = ['ydb-1.example.com']
-    useYdbConfigStore().domain = 'Root'
-
-    const wrapper = mountScreen()
-    const db = useDatabasesStore()
-    const em = useEmStore()
-
-    db.setConfigVariant('single-plus-em')
-    await nextTick()
-
-    expect(em.useDynamicConfig).toBe(true)
-    expect(em.dbConnectionDBRoot).toBe('/Root')
-    expect(em.dbConnectionEndpoint).toBe('grpcs://ydb-1.example.com:2135')
-    expect(db.entries[1]?.name).toBe('ydb_em')
-    expect(em.dbConnectionDB).toBe('ydb_em')
-    expect(em.hosts[0]?.fqdn).toBe('ydb-1.example.com')
-    wrapper.unmount()
   })
 
   it('updates the single DB entry name and flags an empty name', async () => {
@@ -205,66 +156,6 @@ describe('DatabasesScreen', () => {
     db.updateEntry(0, 'name', 'user_db')
     await nextTick()
     expect(session.canGoNext).toBe(db.canProceed)
-    wrapper.unmount()
-  })
-
-  it('hides the single-plus-em variant when the flag is off', async () => {
-    const wrapper = mountScreen()
-    const db = useDatabasesStore()
-
-    expect(variantButtons(wrapper)).toHaveLength(2)
-    expect(wrapper.text()).not.toContain('Single DB + YDB EM')
-    expect(db.configVariant).toBe('single')
-    wrapper.unmount()
-  })
-
-  it('enables the single-plus-em variant when the flag is on', async () => {
-    const { api } = await import('@/api/client')
-    vi.mocked(api.getRuntimeInfo).mockResolvedValue({ embedded: true, extracted: true, show_em_scenarios: true })
-    await useRuntimeStore().load()
-
-    const wrapper = mountScreen()
-    const db = useDatabasesStore()
-
-    expect(variantButtons(wrapper)).toHaveLength(3)
-    const emBtn = variantButtons(wrapper)[2]
-    expect(emBtn.attributes('disabled')).toBeUndefined()
-
-    await emBtn.trigger('click')
-    expect(db.configVariant).toBe('single-plus-em')
-    wrapper.unmount()
-  })
-
-  it('enables single-plus-em without a bundled runtime', async () => {
-    const { api } = await import('@/api/client')
-    vi.mocked(api.getRuntimeInfo).mockResolvedValue({ embedded: false, extracted: false, show_em_scenarios: true })
-    await useRuntimeStore().load()
-
-    const wrapper = mountScreen()
-    const db = useDatabasesStore()
-
-    const emBtn = variantButtons(wrapper)[2]
-    expect(emBtn.attributes('disabled')).toBeUndefined()
-
-    await emBtn.trigger('click')
-    expect(db.configVariant).toBe('single-plus-em')
-    wrapper.unmount()
-  })
-
-  it('resets a persisted single-plus-em variant to single when the flag is off', async () => {
-    const db = useDatabasesStore()
-    const session = useSessionStore()
-
-    // Simulate an existing inventory with single-plus-em before the screen
-    // mounts; the hydration watch resets it on the immediate evaluation.
-    db.setConfigVariant('single-plus-em')
-    expect(db.configVariant).toBe('single-plus-em')
-
-    const wrapper = mountScreen()
-    await nextTick()
-
-    expect(db.configVariant).toBe('single')
-    expect(session.showEmStep).toBe(false)
     wrapper.unmount()
   })
 
