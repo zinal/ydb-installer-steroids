@@ -1,0 +1,123 @@
+- name: configure clock
+  when: system_timezone is defined
+  block:
+    - name: "set system timezone to {{ system_timezone }}"
+      shell: "timedatectl set-timezone {{ system_timezone }}"
+      notify:
+        - restart cron
+
+    - name: flush handlers
+      meta: flush_handlers
+
+- name: Congestion control kernel module setup
+  block:
+    - name: Build the kernel module customization for congestion control
+      template:
+        src: network-modules.j2
+        dest: /etc/modules-load.d/50-ydbd.conf
+        owner: root
+        group: root
+        mode: '0644'
+    - name: Load the {{ ydb_congestion_module }} module
+      command: "/sbin/modprobe {{ ydb_congestion_module }}"
+  when: ydb_congestion_module is defined and ydb_congestion_module != '' and ansible_distribution != "RedHat" and ansible_distribution != "SberLinux"
+
+- name: Refresh the current sysctl settings
+  command: "/sbin/sysctl --system"
+
+- name: configure systemd-journald
+  block:
+    - name: create conf.d directory for journald
+      file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+
+    - name: configure systemd-journald
+      copy:
+        content: |
+          [Journal]
+          ForwardToWall=no
+        dest: /etc/systemd/journald.conf.d/ydb.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify:
+        - restart journald
+
+    - name: flush handlers
+      meta: flush_handlers
+
+    - name: start journald
+      ansible.builtin.systemd:
+        name: systemd-journald.service
+        state: started
+        enabled: true
+
+- name: configure kernel
+  block:
+    - name: configure /etc/modules-load.d dir
+      file:
+        path: /etc/modules-load.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: setup conntrack module
+      copy:
+        content: nf_conntrack
+        dest: /etc/modules-load.d/conntrack.conf
+
+    - name: load conntrack module
+      shell: "/sbin/modprobe nf_conntrack"
+
+    - name: setup sysctl files
+      template:
+        src: "{{ item }}"
+        owner: root
+        group: root
+        mode: '0o644'
+        dest: /etc/sysctl.d/{{ item }}
+      with_items:
+        - 10-link-restrictions.conf
+        - 10-network-security.conf
+        - 10-ptrace.conf
+        - 10-zeropage.conf
+        - 30-fs.conf
+        - 30-inotify.conf
+        - 30-kernel.conf
+        - 30-net.conf
+        - 30-netfilter.conf
+        - 30-vm.conf
+      notify: apply kernel settings
+
+    - name: flush handlers
+      meta: flush_handlers
+
+
+- name: configure cpu governor
+  block:
+    - name: use performance cpu governor
+      copy:
+        content: "GOVERNOR=performance"
+        dest: /etc/default/cpufrequtils
+      notify: restart cpufrequtils
+
+    - name: disable ondemand.service
+      ansible.builtin.systemd:
+        name: ondemand.service
+        state: stopped
+        enabled: false
+        masked: true
+      when: '"ondemand.service" in ansible_facts.services'
+      notify: restart cpufrequtils
+
+    - name: flush handlers
+      meta: flush_handlers
+
+    - name: start cpufrequtils
+      ansible.builtin.systemd:
+        name: cpufrequtils.service
+        state: started
+        enabled: true
+      when: "'cpufrequtils' in services"

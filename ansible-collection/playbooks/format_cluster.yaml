@@ -1,0 +1,62 @@
+---
+
+# PLAYBOOK: ydb_platform.ydb.format_cluster
+# PROPOSE : This playbook is designed to shutdown cluster and format drives
+#           
+# HOW TO USE:
+#     Use https://github.com/ydb-platform/ydb-ansible-examples as an example to prepare Ansible
+#     You will need proper:
+#     - inventory
+#
+# EXAMPLE:
+#
+# ansible-playbook ydb_platform.ydb.format_cluster
+#
+# WARNING: 
+#   This will destroy ALL DATA on all drives defined in inventory
+#   This will delete all `bin` and `cfg` folders for YDB on hosts
+#
+# REQUIRED SOFTWARE: lsblk, dd, xargs, awk, rm
+#
+
+- hosts: "{{ ansible_play_hosts | default('ydb') }}"
+  become: true
+
+  roles:
+  - role: preflight
+
+  tasks:
+
+    - name: "Stop services"
+      ansible.builtin.shell:
+        cmd: "systemctl list-units | grep ydbd | awk '{print $1;}' | xargs systemctl stop || true"
+      ignore_errors: True
+      tags:
+        - services
+
+    - name: "Remove folders"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      with_items: 
+        - "{{ ydb_dir }}/bin"
+        - "{{ ydb_dir }}/cfg"
+        - "{{ ydb_dir }}/config-dir"
+      tags:
+        - folders
+
+    - name: Remove services
+      ansible.builtin.shell:
+        cmd: "rm -f /etc/systemd/system/ydbd-*.service && systemctl daemon-reload"
+      tags:
+        - services
+
+- name: "Format storage drives, erase metadata "
+  hosts: "{{ groups['ydbd_static'] if 'ydbd_static' in groups else groups['ydb'] }}"
+  any_errors_fatal: true
+  vars:
+    ydb_format_disk: True
+    ydb_format_disk_prepare: False
+  roles:
+
+    - role: ydb_platform.ydb.format_drives

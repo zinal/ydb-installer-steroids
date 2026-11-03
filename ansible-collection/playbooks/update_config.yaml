@@ -1,0 +1,319 @@
+---
+# PLAYBOOK: ydb_platform.ydb.update_config
+# PROPOSE : This playbook is designed for updating configs and restarting cluster
+#           
+# EXAMPLE:
+#
+# Update and restart all nodes
+#   ansible-playbook ydb_platform.ydb.update_config
+#
+# Only update configs on all nodes 
+#   ansible-playbook ydb_platform.ydb.update_config -t no_restart
+#
+# Update and restart all nodes with FORCE mode
+#   ansible-playbook ydb_platform.ydb.update_config --extra-vars "availability_mode=force"
+
+- name: Check if required variables are defined
+  hosts: "{{ ansible_play_hosts | default('ydb') }}"
+
+  tasks:
+
+  - ansible.builtin.assert:
+      that:
+        - lookup('vars', item, default=None) is not none
+      fail_msg: "Either {{ item }} variable is required"
+    loop:
+      - "ydb_cores_static"
+      - "ydb_cores_dynamic"
+      - "ydb_tls_dir"
+  tags:
+    - storage
+    - static
+    - database
+    - dynamic
+    - no_restart
+    - always
+
+- name: Load presettings
+  hosts: "{{ ansible_play_hosts | default('ydb') }}"
+
+  roles:
+  - role: preflight
+
+  tasks:
+  - name: get ydb version if not defined
+    shell: "{{ ydb_dir }}/release/archive/bin/ydbd --compatibility-info | awk '$1 ~ \"Version:\" { gsub(/-/, \".\", $2); print $2 }'"
+    register: cmd_version
+    run_once: true
+    when: ydb_version is not defined
+  - name: set ydb_version from detected version
+    set_fact:
+      ydb_version: "{{ cmd_version.stdout }}"
+    run_once: true
+    when: ydb_version is not defined
+
+  - name: set ydb_config_v2 based on version if not explicitly set
+    set_fact:
+      ydb_config_v2: false
+    run_once: true
+    when: ydb_config_v2 is not defined
+
+  tags:
+    - storage
+    - static
+    - database
+    - dynamic
+    - no_restart
+    - always
+
+- name: Update configs
+  hosts: "{{ ansible_play_hosts | default('ydb') }}"
+  become: true
+  become_method: sudo
+  become_user: root
+  vars:
+    ydb_storage_update_config: False
+
+  tasks:
+  - name: get ydb token for cluster config management
+    ydb_platform.ydb.get_token:
+      ydb_bin: "{{ ydb_dir }}/bin/ydb"
+      ld_library_path: "{{ ydb_dir }}/lib"
+      ca_file: "{{ ydb_dir }}/certs/ca.crt"
+      endpoint: "grpcs://{{ ydb_front | default(ydb_brokers | flatten(levels=1) | first) }}:2135"
+      database: "/{{ ydb_domain }}"
+      user: "{{ ydb_user }}"
+      password: "{{ ydb_password }}"
+      retry_on_ssl_error: true
+    no_log: true
+    run_once: true
+    register: ydb_credentials
+    until: "'token' in ydb_credentials"
+    retries: 30
+    delay: 15
+    when: ydb_config_v2 | default(false) or ydb_storage_update_config|bool
+    become: true
+    become_method: sudo
+    become_user: ydb
+    tags:
+      - storage
+      - static
+      - database
+      - dynamic
+      - no_restart
+
+  - name: init YDB storage if not initialized
+    ydb_platform.ydb.init_storage:
+      config_file: "{{ ydb_dir }}/cfg/ydbd-config-static.yaml"
+      ydbd_bin: "{{ ydb_dir }}/bin/ydbd"
+      ca_file: "{{ ydb_dir }}/certs/ca.crt"
+      endpoint: "grpcs://{{ ydb_front | default(inventory_hostname) }}:2135"
+      token: "{{ ydb_credentials.token }}"
+      update_config: "{{ ydb_storage_update_config }}"
+    register: init_storage
+    run_once: true
+    when: ydb_storage_update_config|bool and ydb_config_v2|bool != True
+    tags:
+      - storage
+      - static
+      - no_restart
+
+  - name: generate random temporary config file path
+    set_fact:
+      ydb_temp_config_path: "/tmp/ydbd-config-{{ ansible_date_time.epoch }}-{{ 999999 | random }}.yaml"
+    run_once: true
+    when: ydb_config_v2|bool | default(false)
+    tags:
+      - storage
+      - static
+      - database
+      - dynamic
+      - no_restart
+
+  - name: check if ydb_config is a map
+    set_fact:
+      ydb_config_is_map: "{{ ydb_config is mapping }}"
+    tags:
+      - storage
+      - static
+      - database
+      - dynamic
+      - no_restart
+
+  - name: V2 configuration management block
+    block:
+
+      - name: Get YDB CLI version
+        run_once: true
+        shell: "{{ ydb_dir }}/bin/ydb version | awk '{print $3;}'"
+        register: ydb_cli_version
+
+      - name: Check YDB CLI version (it must be above 2.21)
+        run_once: true
+        when: "ydb_cli_version.stdout is version('2.20', '<=')"
+        ansible.builtin.fail:
+          msg: "Aborting playbook execution. Install YDB CLI 2.21 or newer. Current version is {{ ydb_cli_version.stdout }}"
+
+      - name: get current cluster configuration metadata
+        ydb_platform.ydb.cluster_config:
+          ydb_bin: "{{ ydb_dir }}/bin/ydb"
+          ld_library_path: "{{ ydb_dir }}/lib"
+          ca_file: "{{ ydb_dir }}/certs/ca.crt"
+          endpoint: "grpcs://{{ ydb_front | default(inventory_hostname) }}:2135"
+          token: "{{ ydb_credentials.token }}"
+          mode: fetch
+        run_once: true
+        become: true
+        become_method: sudo
+        become_user: ydb
+        register: current_cluster_config
+        until: current_cluster_config is succeeded
+        retries: 30
+        delay: 15
+
+      - name: apply patch_config_v2 to configuration
+        ydb_platform.ydb.patch_config:
+          config: "{{ ydb_config_dict }}"
+          output_file: "{{ ydb_temp_config_path }}"
+          hostvars: "{{ hostvars }}"
+          ydb_disks: "{{ ydb_disks }}"
+          groups: "{{ groups }}"
+          ydb_dir: "{{ ydb_dir }}"
+        run_once: true
+        register: patched_config_result
+
+      - name: set ownership of temporary file
+        file:
+          path: "{{ ydb_temp_config_path }}"
+          owner: ydb
+          group: ydb
+        run_once: true
+        become: true
+        register: set_temp_ownership_result
+        until: set_temp_ownership_result is succeeded
+        retries: 5
+        delay: 5
+        # when: not ydb_config_is_map
+
+      - name: update configuration with selectors
+        ydb_platform.ydb.apply_config_selectors:
+          config: "{{ ydb_temp_config_path }}"
+          output_file: "{{ ydb_temp_config_path }}"
+          database_cores: "{{ ydb_cores_dynamic | default(omit) }}"
+          storage_cores: "{{ydb_cores_static | default(omit) }}"
+        become: true
+        become_user: ydb
+        run_once: true
+        when: ydb_cores_dynamic is defined or ydb_cores_static is defined
+        register: selectors_result
+        until: selectors_result is succeeded
+        retries: 5
+        delay: 5
+        tags:
+          - selectors
+
+      - name: update metadata in configuration
+        ydb_platform.ydb.update_metadata:
+          config: "{{ ydb_temp_config_path }}"
+          output_file: "{{ ydb_temp_config_path }}"
+          current_metadata: "{{ current_cluster_config.metadata }}"
+        run_once: true
+        become: true
+        become_user: ydb
+        register: v2_config_result
+        until: v2_config_result is succeeded
+        retries: 5
+        delay: 5
+        # when: not ydb_config_is_map
+      
+      - name: update cluster configuration using YDB config management V2
+        ydb_platform.ydb.cluster_config:
+          ydb_bin: "{{ ydb_dir }}/bin/ydb"
+          ld_library_path: "{{ ydb_dir }}/lib"
+          ca_file: "{{ ydb_dir }}/certs/ca.crt"
+          endpoint: "grpcs://{{ ydb_front | default(inventory_hostname) }}:2135"
+          token: "{{ ydb_credentials.token }}"
+          config_file: "{{ ydb_temp_config_path }}"
+          mode: replace
+        run_once: true
+        become: true
+        become_method: sudo
+        become_user: ydb
+        register: update_cluster_config_result
+        until: update_cluster_config_result is succeeded
+        retries: 30
+        delay: 15
+        # when: not ydb_config_is_map
+
+    always:
+      - name: cleanup temporary config file
+        file:
+          path: "{{ ydb_temp_config_path }}"
+          state: absent
+        run_once: true
+        become: true
+        become_method: sudo
+        become_user: ydb
+        when: ydb_temp_config_path is defined
+
+    when: ydb_config_v2|bool | default(false)
+    tags:
+      - storage
+      - static
+      - database
+      - dynamic
+      - no_restart
+
+  - name: handle ydb_config for V1 configuration
+    block:
+
+      - name: copy configuration from map for V1
+        copy:
+          content: "{{ ydb_config | ydb_platform.ydb.ydb_config_to_yaml }}"
+          dest: "{{ ydb_dir }}/cfg/ydbd-config.yaml"
+          owner: ydb
+          group: ydb
+          mode: 0640
+        when: ydb_config_is_map
+
+      - name: copy configuration from file for V1
+        copy:
+          src: "{{ ydb_config }}"
+          dest: "{{ ydb_dir }}/cfg/ydbd-config.yaml"
+          owner: ydb
+          group: ydb
+          mode: 0640
+        when: not ydb_config_is_map
+
+    when: not ydb_config_v2 | default(false)
+    tags:
+      - storage
+      - static
+      - database
+      - dynamic
+      - no_restart
+
+  - name: update static node configuration file (V1 configuration only)
+    command: "{{ ydb_dir }}/home/update_config_file.sh ydbd-config.yaml ydbd-config-static.yaml STORAGE {{ ydb_cores_static | default(ydb_cores_static, true) }}"
+    changed_when: false
+    when: not ydb_config_v2 | default(false)
+    tags:
+      - storage
+      - static
+      - no_restart
+
+  - name: create dynamic node configuration file (V1 configuration only)
+    command: "{{ ydb_dir }}/home/update_config_file.sh ydbd-config.yaml ydbd-config-dynamic.yaml COMPUTE {{ ydb_cores_dynamic | default(ydb_cores_dynamic, true) }}"
+    changed_when: false
+    when: not ydb_config_v2 | default(false)
+    tags:
+      - database
+      - dynamic
+      - no_restart
+
+- name: Restart YDB cluster (V1 configuration only)
+  ansible.builtin.import_playbook: restart.yaml
+  when: not ydb_config_v2 | default(false)
+  tags:
+    - restart
+

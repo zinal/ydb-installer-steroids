@@ -1,0 +1,21 @@
+all:
+  children:
+    ydb:
+      hosts:
+        static-node-1.ydb-cluster.com: null
+        static-node-2.ydb-cluster.com: null
+        static-node-3.ydb-cluster.com: null
+      vars:
+        ansible_user: ansible
+        ydb_domain: Root
+        ydb_user: root
+        ydb_cores_static: 2
+        ydb_disks:
+          - name: /dev/sda
+            label: disk1
+          - name: /dev/sdb
+            label: disk2
+          - name: /dev/sdc
+            label: disk3
+        ydb_version: "25.4.1.15"
+        system_timezone: UTC

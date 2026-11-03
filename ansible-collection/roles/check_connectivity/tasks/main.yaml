@@ -1,0 +1,26 @@
+---
+
+- ansible.builtin.gather_facts:
+
+- ansible.builtin.include_tasks: check_ansible.yaml
+  run_once: true
+  tags:
+    - checks
+    - check_ansible
+
+- ansible.builtin.include_tasks: check_ydb.yaml
+  tags:
+    - checks
+    - check_ydb
+
+- ansible.builtin.include_tasks: check_connectivity.yaml
+  tags:
+    - checks
+    - check_connectivity
+
+- ansible.builtin.include_tasks: check_time_diff.yaml
+  tags:
+    - checks
+    - check_time
+    - never
+  

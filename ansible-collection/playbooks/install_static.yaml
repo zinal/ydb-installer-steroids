@@ -1,0 +1,6 @@
+- hosts: "{{ ansible_play_hosts | default('ydb') }}"
+  become: true
+  tasks:
+    - name: setup ydb static nodes
+      ansible.builtin.import_role:
+        name: ydb_platform.ydb.ydbd_static

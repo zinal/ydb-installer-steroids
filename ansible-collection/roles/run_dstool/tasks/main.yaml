@@ -1,0 +1,30 @@
+---
+
+- name: get ydb token
+  ydb_platform.ydb.get_token:
+    ydb_bin: "{{ ydb_dir }}/bin/ydb"
+    ca_file: "{{ ydb_dir }}/certs/ca.crt"
+    endpoint: "grpcs://{{ ydb_front | default(ydb_brokers | flatten(levels=1) | first) }}:2135"
+    database: "/{{ ydb_domain }}"
+    user: "{{ ydb_user }}"
+    password: "{{ ydb_password }}"
+    retry_on_ssl_error: true
+  no_log: true
+  run_once: true
+  register: ydb_credentials
+  until: "'token' in ydb_credentials"
+  retries: 15
+  delay: 15
+
+- name: Execute command
+  ydb_platform.ydb.dstool_cmd:
+    cmd: "{{ cmd }}"
+    dstool_bin: "{{ ydb_dir }}/bin/ydb-dstool"
+    ca_file: "{{ ydb_dir }}/certs/ca.crt"
+    endpoint: "grpcs://{{ ydb_front | default(ydb_brokers | flatten(levels=1) | first) }}:2135"
+    token: "{{ ydb_credentials.token | default('') }}"
+  register: cmd_result
+
+- name: Command output
+  debug:
+    var: cmd_result

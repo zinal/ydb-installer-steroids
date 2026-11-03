@@ -1,0 +1,93 @@
+/* Global app styles — typography, design tokens, and a few utility tweaks
+ * applied on top of Vuetify defaults to give the installer a more refined,
+ * minimal look. */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --shadow-1: 0 1px 2px 0 rgba(15, 23, 42, 0.04), 0 1px 3px 0 rgba(15, 23, 42, 0.06);
+  --shadow-2: 0 4px 12px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+  --shadow-3: 0 12px 32px -8px rgba(15, 23, 42, 0.10), 0 4px 12px -2px rgba(15, 23, 42, 0.06);
+  --radius-card: 14px;
+
+  /* Single centered content column shared by header, content and footer.
+   * 960px outer box − 2 × 40px gutters = 880px usable content width.
+   * Screens must NOT add their own max-width wrappers on top of this. */
+  --content-max-width: 960px;
+  --content-gutter: 40px;
+}
+
+@media (max-width: 768px) {
+  :root { --content-gutter: 24px; }
+}
+
+/* Shared centered column — applied to the app header inner, the content
+ * canvas and the footer inner so all three align at every viewport width. */
+.layout-column {
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin-inline: auto;
+}
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
+}
+
+code, pre, kbd, samp {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Soft card style applied via Vuetify defaults. */
+.card-soft {
+  box-shadow: var(--shadow-1) !important;
+  border: 1px solid rgb(var(--v-theme-border-soft));
+  background: rgb(var(--v-theme-surface));
+}
+
+.card-elevated {
+  box-shadow: var(--shadow-2) !important;
+}
+
+/* Soft surface backdrop for subtle inset blocks. */
+.surface-soft {
+  background: rgb(var(--v-theme-surface-variant));
+  border-radius: var(--radius-card);
+}
+
+/* Utility: small uppercase eyebrow label. */
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+}
+
+/* Smooth focus rings. */
+.v-btn:focus-visible,
+.v-list-item:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+}
+
+/* Subtle scrollbar. */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: #94a3b8; background-clip: padding-box; border: 2px solid transparent; }
+
+/* Vuetify nav drawer override to remove default border. */
+.v-navigation-drawer { border-inline-end: 1px solid rgb(var(--v-theme-border-soft)) !important; }
+
+/* App bar bottom hairline. */
+.v-app-bar.v-app-bar { border-bottom: 1px solid rgb(var(--v-theme-border-soft)); }

@@ -1,0 +1,6 @@
+---
+sections:
+- title: Scenario Guide
+  toctree:
+    - cpu
+    - format_cluster

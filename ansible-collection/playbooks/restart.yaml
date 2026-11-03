@@ -1,0 +1,38 @@
+---
+
+# PLAYBOOK: ydb_platform.ydb.restart
+# PROPOSE : This playbook is designed for safe restart for the cluster
+#           
+# EXAMPLE:
+#
+# Restart all nodes
+#   ansible-playbook ydb_platform.ydb.restart
+#
+# Restart all nodes on the host
+#   ansible-playbook ydb_platform.ydb.restart -l <HostFQDN>
+#
+# Restart all storage nodes
+#   ansible-playbook ydb_platform.ydb.restart -t storage
+#
+# Restart all dnyamic nodes
+#   ansible-playbook ydb_platform.ydb.restart -t dynamic
+#
+
+- hosts: "{{ ansible_play_hosts | default('ydb') }}"
+  become: true
+
+  roles:
+  - role: ydbd_rolling_static
+    availability_mode: weak
+    tags:
+      - storage
+      - static
+
+- hosts: "{{ ansible_play_hosts | default('ydb') }}"
+  serial: "{{ ydb_restart_serial | default(1) }}"
+
+  roles:
+  - role: ydbd_rolling_dynamic
+    tags:
+      - database
+      - dynamic

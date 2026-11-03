@@ -1,0 +1,190 @@
+---
+
+
+- name: Set vars_for_distribution_version variables for the Linux distribution version
+  ansible.builtin.include_vars:
+    file: "{{ item }}"
+    name: vars_for_distribution_version
+  with_first_found:
+    - files:
+      - "{{ vars_for_distribution_version_file }}"
+      - "{{ vars_for_distribution_major_file }}"
+      - "{{ vars_for_distribution_file }}"
+      skip: True
+
+- name: Alert
+  ansible.builtin.pause:
+    prompt: "WARRNING: Can't find settings for this Linux distribution {{ vars_for_distribution_version_dir }}."
+  when: vars_for_distribution_version is not defined
+
+- name: Manual install packages for SberLinux
+  when: ansible_distribution == "SberLinux" and ansible_distribution_version == "9.0"
+  block:
+
+    - name: check if libxcrypt-compat is present
+      delegate_to: 127.0.0.1
+      run_once: true
+      become: false
+      stat:
+        path: "{{ package_libxcrypt }}"
+      register: package_libxcrypt_stat
+    
+    - name: Download libxcrypt
+      delegate_to: 127.0.0.1
+      run_once: true
+      become: false
+      ansible.builtin.get_url:
+        url: "{{ package_libxcrypt_url }}"
+        dest: "{{ package_libxcrypt }}"
+      when: not package_libxcrypt_stat.stat.exists|bool
+
+    - name: Copy libxcrypt-compat
+      ansible.builtin.copy:
+        src: "{{ package_libxcrypt }}"
+        dest: /tmp/libxcrypt-compat.rpm
+      
+    - name: Install libxcrypt-compat
+      become: true
+      shell: "rpm --replacepkgs -i --nodeps /tmp/libxcrypt-compat.rpm"
+
+    - name: Copy libxcrypt-compat
+      shell: "rm /tmp/libxcrypt-compat.rpm"
+  tags: libxcrypt-compat
+
+- name: install required packages
+  become: true
+  become_user: root
+  ansible.builtin.package:
+    pkg: "{{ vars_for_distribution_version.packages_required }}"
+    state: present
+  timeout: 900
+  when: vars_for_distribution_version is defined
+  tags:
+    - packages
+
+- name: install cpufrequtils
+  ansible.builtin.package:
+    pkg: cpufrequtils
+    state: present
+  timeout: 300
+  when: ydb_tools_install|bool and ansible_os_family != 'Altlinux'
+
+- name: configure unconfigured packages
+  when: ydb_dpkg_configure|bool and ansible_os_family == 'Debian' and ydb_tools_install|bool
+  block:
+    - name: check dpkg audit
+      shell: dpkg --audit
+      register: dpkg_audit_result
+      failed_when: dpkg_audit_result.rc not in [ 0, 1 ]
+      changed_when: false
+
+    - name: run the equivalent of "apt-get clean" as a separate step
+      apt:
+        clean: yes
+      when: dpkg_audit_result.rc != 0
+
+    - name: run the equivalent of "apt-get update" as a separate step
+      apt:
+        update_cache: yes
+      when: dpkg_audit_result.rc != 0
+
+    - name: fix unconfigured packages
+      shell: dpkg --configure --pending
+      when: dpkg_audit_result.rc != 0
+
+- name: setup apt repositories
+  ansible.builtin.apt_repository:
+    repo: "{{ item }}"
+    state: present
+    update_cache: no
+  loop: "{{ vars_for_distribution_version.repositories }}"
+  when: vars_for_distribution_version.repositories and ansible_os_family == 'Debian' and ydb_tools_install|bool
+  notify:
+    - update apt cache
+
+- name: setup apt preferences
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ item.dest }}"
+    force: true
+  loop: "{{ vars_for_distribution_version.preferences }}"
+  when: vars_for_distribution_version.preferences and ansible_os_family == 'Debian' and ydb_tools_install|bool
+  notify:
+    - update apt cache
+
+- name: setup apt configs
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ item.dest }}"
+    force: true
+  loop: "{{ vars_for_distribution_version.configs }}"
+  when: vars_for_distribution_version.configs and ansible_os_family == 'Debian' and ydb_tools_install|bool
+  notify:
+    - update apt cache
+
+- name: flush handlers
+  meta: flush_handlers
+
+- name: install packages by APT
+  ansible.builtin.package:
+    pkg: "{{ vars_for_distribution_version.packages }}"
+    state: present
+  timeout: 900
+  when: ydb_tools_install|bool and vars_for_distribution_version is defined
+
+- name: configure systemd-timesyncd
+  when: ansible_os_family == 'Debian' and ydb_tools_install|bool
+  block:
+    - name: assert required variables are defined
+      ansible.builtin.assert:
+        that:
+          - "{{ (system_ntp_servers|length) > 1 }}"
+      when: system_ntp_servers is defined
+
+    - name: create conf.d directory for timesyncd
+      ansible.builtin.file:
+        path: /etc/systemd/timesyncd.conf.d
+        state: directory
+      when: system_ntp_servers is defined
+
+    - name: configure systemd-timesyncd
+      ansible.builtin.copy:
+        content: |
+          [Time]
+          NTP={{ system_ntp_servers[0] }}
+          FallbackNTP={{ system_ntp_servers[1:] | join(" ") }}
+        dest:  /etc/systemd/timesyncd.conf.d/ydb.conf
+        owner: root
+        group: root
+        mode: '0644'
+      when: system_ntp_servers is defined
+
+    - name: Check if timesyncd exists
+      ansible.builtin.systemd:
+        name: systemd-timesyncd.service
+      register: timesyncd_status
+      notify:
+        - restart timesyncd
+
+    - name: flush handlers
+      meta: flush_handlers
+
+    - name: start timesyncd
+      ansible.builtin.systemd:
+        name: systemd-timesyncd.service
+        state: started
+        enabled: true
+
+- name: configure chrony
+  block:
+    - name: Ensure chrony is installed
+      ansible.builtin.package:
+        name: chrony
+        state: present
+
+    - name: Ensure chrony is running
+      ansible.builtin.systemd:
+        enabled: true
+        state: started
+        name: chronyd
+  when: ansible_os_family != 'Debian' and ydb_tools_install|bool

@@ -1,0 +1,73 @@
+[Unit]
+Description=YDB dynamic node / {{ ydb_dbname }} / {{ item.instance }}
+StartLimitInterval=10
+StartLimitBurst=15
+After=network-online.target rc-local.service ydb-transparent-hugepages.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ydb
+UMask=077
+PermissionsStartOnly=true
+Environment=LD_LIBRARY_PATH={{ ydb_dir }}/lib
+ExecStart={{ ydb_dir }}/bin/ydbd server \
+{% if ydb_config_v2 | default(false) %}{% if location is defined and 'pile' in location %}
+    --bridge-pile-name {{ location['pile'] }} \
+{% endif %}
+{% else %}
+{% if not ydb_use_dynamic_config|bool %}
+    --yaml-config  {{ ydb_dir }}/cfg/ydbd-config-dynamic.yaml \
+{% endif %}
+{% endif %}
+{% if ydb_back_name is defined %}
+    --node-host {{ ydb_back_name }} \
+{% endif %}
+{% if ydb_front is defined %}
+    --grpc-public-host {{ ydb_front }} \
+{% endif %}
+{% if 'offset' in item %}
+    --grpcs-port {{ 2136 + item.offset }} \
+    --ic-port {{ 19002 + item.offset }} \
+    --mon-port {{ 8766 + item.offset }} \
+{% else %}
+    --grpcs-port {{ 2136 + ydb_dynnodes.index(item) }} \
+    --ic-port {{ 19002 + ydb_dynnodes.index(item) }} \
+    --mon-port {{ 8766 + ydb_dynnodes.index(item) }} \
+{% endif %}
+    --tenant /{{ ydb_domain }}/{{ item.dbname | default(ydb_dbname, true) }} \
+{% if ydb_request_client_certificate|bool %}
+    --node-broker-use-tls true \
+{% endif %}
+{% if ydb_node_dc is defined %}
+    --data-center {{ ydb_node_dc }} \
+{% endif %}
+{% if ydb_node_rack is defined %}
+    --rack {{ ydb_node_rack }} \
+{% endif %}
+{% if ydb_node_body is defined %}
+    --body {{ ydb_node_body }} \
+{% endif %}
+    --grpc-ca {{ ydb_dir }}/certs/ca.crt \
+    --ca {{ ydb_dir }}/certs/ca.crt \
+    --mon-cert {{ ydb_dir }}/certs/web.pem \
+    --grpc-cert {{ ydb_dir }}/certs/node.crt \
+    --grpc-key {{ ydb_dir }}/certs/node.key \
+{% for ydb_broker in ydb_brokers %}
+    --node-broker grpcs://{{ ydb_broker }}:2135{% if not loop.last %} \{% endif +%}
+{% endfor %}
+
+LimitNOFILE=65536
+LimitCORE=0
+LimitMEMLOCK=32212254720
+Restart=always
+RestartSec=1
+SyslogIdentifier=ydbd
+SyslogFacility=daemon
+SyslogLevel=err
+{% if 'affinity' in item %}
+CPUAffinity={{ item.affinity }}
+{% endif %}
+
+[Install]
+WantedBy=multi-user.target

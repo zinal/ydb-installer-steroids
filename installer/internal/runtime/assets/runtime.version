@@ -1,0 +1,10 @@
+{
+  "embedded": false,
+  "python": "",
+  "ansible": "",
+  "ansible_core": "",
+  "collection": "",
+  "sha256": "",
+  "collections_subdir": "collections",
+  "root_subdir": "python"
+}

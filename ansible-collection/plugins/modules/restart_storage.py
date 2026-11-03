@@ -1,0 +1,42 @@
+from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.ydb_platform.ydb.plugins.module_utils import cli
+
+DOCUMENTATION = r'''
+    name: restart_storage
+    plugin_type: module
+    short_description: Restart storage nodes using ydbops
+    description: |
+        Restart storage nodes using YDBOps tool
+'''
+
+def main():
+    argument_spec=dict(
+        timeout=dict(type='int', default=180),
+    )
+    cli.YdbOps.add_arguments(argument_spec)
+    module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=False)
+    result = {'changed': False}
+    try:
+        database = module.params.get('database')
+        if database is not None:
+            database = cli.YdbOps.compatible_database(
+                module,
+                module.params.get('ydbops_bin'),
+                database,
+            )
+        ydbops_cli = cli.YdbOps.from_module(module, database=database)
+        module.log(f'running {ydbops_cli.common_options}')
+        rc, stdout, stderr = ydbops_cli([])
+        result['msg'] = f'ydbops status — rc: {rc}, stdout: {stdout}, stderr: {stderr}'
+        if rc == 0:
+            module.exit_json(**result)
+        else:
+            module.fail_json(**result)
+
+    except Exception as e:
+        result['msg'] = f'unexpected exception: {e}'
+        module.fail_json(**result)
+
+
+if __name__ == '__main__':
+    main()

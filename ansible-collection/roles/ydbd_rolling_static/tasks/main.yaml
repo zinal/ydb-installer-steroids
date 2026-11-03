@@ -1,0 +1,151 @@
+---
+# ydbd storage rolling restart
+
+- name: get ydb token
+  ydb_platform.ydb.get_token:
+    ydb_bin: "{{ ydb_dir }}/bin/ydb"
+    ca_file: "{{ ydb_dir }}/certs/ca.crt"
+    endpoint: "grpcs://{{ ydb_front | default(ydb_brokers | flatten(levels=1) | first) }}:2135"
+    database: "/{{ ydb_domain }}"
+    user: "{{ ydb_user }}"
+    password: "{{ ydb_password }}"
+    retry_on_ssl_error: true
+  no_log: true
+  run_once: true
+  register: ydb_credentials
+  until: "'token' in ydb_credentials"
+  retries: 15
+  delay: 15
+
+# ydbops_source_bin - source binary for ydbops
+# values: ydbops - Linux x86_64
+#         ydbops_darwin_arm64 - MacOS Silicon M1/..
+#         ydbops_darwin_amd64 - MacOS Intel
+# Default value: ydbops
+- name: "Define ydbops name"
+  set_fact:
+    ydbops_source_bin: ydbops
+
+
+- name: Restart from localhost
+  become: false
+  when: ydbops_local|bool
+  block:
+    - name: Check ydbops is present
+      delegate_to: 127.0.0.1
+      stat:
+        path: "{{ ansible_config_file | dirname }}/bin/ydbops"
+      register: ydbops_stat
+
+    - name: Create bin directory
+      delegate_to: 127.0.0.1
+      run_once: true
+      ansible.builtin.file:
+        path: "{{ ansible_config_file | dirname }}/bin/"
+        state: directory
+      when: not ydbops_stat.stat.exists|bool
+
+    - name: "Gather"
+      delegate_to: 127.0.0.1
+      ansible.builtin.setup:
+      when: not ydbops_stat.stat.exists|bool
+
+    - name: "MacOS"
+      when: ansible_facts.os_family == "Darwin" and not ydbops_stat.stat.exists|bool
+      set_fact:
+        ydbops_source_bin: "{{ ydbops_source_bin  }}_darwin_{{ ansible_facts.architecture }}"
+
+    - name: "Restore facts"
+      ansible.builtin.setup:
+      when: not ydbops_stat.stat.exists|bool
+
+    - name: Install ydbops
+      delegate_to: 127.0.0.1
+      run_once: true
+      ansible.builtin.get_url:
+        url: "{{ ydbops_release_url }}/{{ ydbops_source_bin }}"
+        dest: "{{ ansible_config_file | dirname }}/bin/ydbops"
+        mode: 0755
+      when: not ydbops_stat.stat.exists|bool
+
+    - name: "Run ydbops to gracefully restart part of the cluster, it takes a long time"
+      delegate_to: 127.0.0.1
+      run_once: true
+      ydb_platform.ydb.restart_storage:
+        ydbops_bin: "{{ ansible_config_file | dirname }}/bin/ydbops"
+        ydbops_endpoint: "grpcs://{{ ydb_brokers | default(groups['ydb']) | flatten(levels=1) | first }}:2135"
+        database: "/{{ ydb_domain }}"
+        ssh_args: "ssh {{ ansible_ssh_common_args }} {{ '-l ' + ansible_user if ansible_user is defined else '' }} {{ '-i ' + ansible_ssh_private_key_file if ansible_ssh_private_key_file is defined else '' }}"
+        ca_file: "{{ ydb_tls_dir }}/ca.crt"
+        token: "{{ ydb_credentials.token }}"
+        availability_mode: "{{ availability_mode }}"
+        hosts: "{{ ansible_play_batch | join(',') }}"
+        log_file: "{{ ydbops_log }}"
+        duration: "{{ ydbops_duration }}"
+      when: ansible_limit is defined
+
+    - name: "Run ydbops to gracefully restart the cluster, it takes a long time"
+      delegate_to: 127.0.0.1
+      run_once: true
+      ydb_platform.ydb.restart_storage:
+        ydbops_bin: "{{ ansible_config_file | dirname }}/bin/ydbops"
+        ydbops_endpoint: "grpcs://{{ ydb_brokers | default(groups['ydb']) | flatten(levels=1) | first }}:2135"
+        database: "/{{ ydb_domain }}"
+        ssh_args: "ssh {{ ansible_ssh_common_args }} {{ '-l ' + ansible_user if ansible_user is defined else '' }} {{ '-i ' + ansible_ssh_private_key_file if ansible_ssh_private_key_file is defined else '' }}"
+        ca_file: "{{ ydb_tls_dir }}/ca.crt"
+        token: "{{ ydb_credentials.token }}"
+        availability_mode: "{{ availability_mode }}"
+        log_file: "{{ ydbops_log }}"
+        duration: "{{ ydbops_duration }}"
+      when: ansible_limit is not defined
+
+- name: Restart from static node
+  when: not ydbops_local|bool
+  become: true
+  throttle: 1
+  block:
+    - name: Check ydbops is present
+      stat:
+        path: "{{ ydb_dir }}/bin/ydbops"
+      register: ydbops_stat
+
+    - name: "MacOS"
+      when: ansible_facts.os_family == "Darwin" and not ydbops_stat.stat.exists|bool
+      set_fact:
+        ydbops_source_bin: "{{ ydbops_source_bin  }}_darwin_{{ ansible_facts.architecture }}"
+
+    - name: Install ydbops
+      ansible.builtin.get_url:
+        url: "{{ ydbops_release_url }}/{{ ydbops_source_bin }}"
+        dest: "{{ ydb_dir }}/bin/ydbops"
+        mode: 0755
+      when: ydbops_binary is not defined and not ydbops_stat.stat.exists|bool
+
+    - name: Install ydbops
+      ansible.builtin.copy:
+        src: "{{ ydbops_binary }}"
+        dest: "{{ ydb_dir }}/bin/ydbops"
+        mode: 0755
+      when: ydbops_binary is defined and not ydbops_stat.stat.exists|bool
+
+    - name: "Run ydbops to gracefully restart the cluster, it takes a long time"
+      ydb_platform.ydb.restart_storage:
+        ydbops_bin: "{{ ydb_dir }}/bin/ydbops"
+        ydbops_endpoint: "grpcs://{{ ydb_brokers | default(groups['ydb']) | flatten(levels=1) | first }}:2135"
+        database: "/{{ ydb_domain }}"
+        ssh_args: "bash"
+        ca_file: "{{ ydb_dir }}/certs/ca.crt"
+        token: "{{ ydb_credentials.token }}"
+        availability_mode: "{{ availability_mode }}"
+        hosts: "{{ inventory_hostname }}"
+        log_file: "{{ ydbops_log }}"
+        duration: "{{ ydbops_duration }}"
+
+- name: YDB storage check
+  include_tasks: "check_static.yaml"
+  loop: "{{ brokers | default(groups['ydb']) | flatten(levels=1) }}"
+  loop_control:
+    loop_var: snode_name
+  run_once: true
+  tags: 
+    - healthcheck

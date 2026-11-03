@@ -1,0 +1,86 @@
+@startuml
+!theme plain
+title YDB Enterprise Manager Installer - Deployment Diagram
+
+actor "Пользователь" as user
+node "Стенд установки" {
+  [Web Browser] as browser_module
+  folder "Приложение YDB EM Installer" {
+    [Backend API Server] as backend_module
+    [Модуль выдачи статики] as static_module
+    [Модуль установки YDB] as install_module
+    [Модуль проверки требований] as requirements_module
+    [Модуль работы с конфигурацией YDB] as configuration_module
+      note left of configuration_module
+        Генерация и изменение конфигурации YDB:
+        Заполнение полей настроек ssh, версии YDB,
+        хостов, дисков, и доп. настроек
+      end note
+    [Модуль работы с сертификатами TLS/SSL] as certs_module
+    [Модуль работы с прогрессом установки] as progress_module
+    [Скрипт генерации сертификатов] as certs_script
+    [Модуль обработки ошибок] as errors_module
+    [Ansible] as ansible_module
+    [YDB ansible] as ydb_ansible_module
+
+    artifact "config.yaml" as config_artifact
+    configuration_module --> config_artifact : пишет/читает
+
+    artifact "inventory.yaml" as inventory_artifact
+    configuration_module --> inventory_artifact : пишет/читает
+
+    folder "certs" as certs_folder
+    certs_script --> certs_folder : пишет
+    ansible_module --> certs_folder : читает
+
+    artifact "hosts_list" as hosts_list_artifact
+    certs_module --> hosts_list_artifact : пишет
+    certs_script --> hosts_list_artifact : читает
+
+    artifact "ydb.log" as ydb_loq_artifact
+    progress_module --> ydb_loq_artifact : читает
+    ansible_module --> ydb_loq_artifact : пишет
+    errors_module --> ydb_loq_artifact : читает
+    
+    artifact "*.html" as html_files
+    static_module --> html_files
+  }
+}
+
+user --> browser_module : UI-взаимодействие
+browser_module --> backend_module : HTTP/HTTPS запросы
+certs_module --> certs_script : вызывает
+
+backend_module --> static_module
+backend_module --> requirements_module
+backend_module --> errors_module
+backend_module --> progress_module
+backend_module ---> configuration_module
+backend_module --> certs_module
+backend_module --> install_module
+
+rectangle "Кластер YDB" {
+  rectangle "ДЦ 1" {
+    node "Node 1" {
+      [YDB хост 1] as host_1
+    }
+  }
+  rectangle "ДЦ 2" {
+    node "Node 2" {
+      [YDB хост 2] as host_2
+    }
+  }
+  rectangle "ДЦ 3" {
+    node "Node 3" {
+      [YDB хост 3] as host_3
+    }
+  }
+}
+
+install_module --> ansible_module
+ansible_module --> ydb_ansible_module
+ydb_ansible_module --> host_1 : деплой YDB
+ydb_ansible_module --> host_2 : деплой YDB
+ydb_ansible_module --> host_3 : деплой YDB
+
+@enduml

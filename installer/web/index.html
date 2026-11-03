@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Подготовка к установке YDB</title>
+  <link rel="stylesheet" href="style.css">
+  <meta http-equiv="Cache-Control" content="no-cache">
+</head>
+<body>
+    <picture><img alt="Иконка лого" class="pc-logo__icon" src="logo-full-site-header.svg"></picture>
+
+    <div class="container">
+    <h1>Подготовка к установке YDB</h1>
+
+    <!-- Шаг 1: Список хостов -->
+    <section id="step-hosts">
+      <h2>1. Укажите хосты для установки</h2>
+      <textarea id="hosts" rows="6" placeholder="Введите IP или имена хостов, по одному на строку..."></textarea>
+      <button onclick="nextStep('step-hosts', 'step-ssh')">Далее</button>
+    </section>
+
+    <!-- Шаг 2: Настройки SSH -->
+    <section id="step-ssh" style="display: none;">
+      <h2>2. Настройки SSH</h2>
+      <label>
+        Пользователь: <input type="text" id="sshUser" value="root">
+      </label>
+      <label>
+        Порт: <input type="number" id="sshPort" value="22">
+      </label>
+      <label>
+        Путь к приватному ключу: <input type="text" id="sshKeyPath" placeholder="/home/user/.ssh/id_rsa">
+      </label>
+      <div>
+        <input type="checkbox" id="usePassword">
+        <label for="usePassword">Использовать пароль (не рекомендуется)</label>
+      </div>
+      <div id="passwordField" style="display: none;">
+        <label>Пароль: <input type="password" id="sshPassword"></label>
+      </div>
+      <button onclick="prevStep('step-ssh', 'step-hosts')">Назад</button>
+      <button onclick="testSsh()">Проверить подключение</button>
+      <button onclick="nextStep('step-ssh', 'step-disks')">Далее</button>
+      <div id="sshStatus"></div>
+    </section>
+
+    <!-- Шаг 3: Выбор дисков -->
+    <section id="step-disks" style="display: none;">
+      <h2>3. Выбор дисков для YDB</h2>
+      <p>Нажмите «Получить диски», чтобы загрузить список доступных устройств.</p>
+      <button onclick="fetchDisks()">Получить диски</button>
+      <div id="disksList"></div>
+      <button onclick="prevStep('step-disks', 'step-ssh')">Назад</button>
+      <button onclick="nextStep('step-disks', 'step-version')">Далее</button>
+    </section>
+
+    <!-- Шаг 4: Версия YDB -->
+    <section id="step-version" style="display: none;">
+      <h2>4. Версия YDB или путь к бинарникам</h2>
+      <div>
+        <input type="radio" id="versionOnline" name="ydbSource" checked>
+        <label for="versionOnline">Скачать официальную версию:</label>
+        <input type="text" id="ydbVersion" placeholder="23.1.34" value="23.1.34">
+      </div>
+      <div>
+        <input type="radio" id="versionLocal" name="ydbSource">
+        <label for="versionLocal">Указать путь к локальным бинарникам:</label>
+        <input type="text" id="binPath" placeholder="/opt/ydb/bin">
+      </div>
+      <button onclick="prevStep('step-version', 'step-disks')">Назад</button>
+      <button onclick="nextStep('step-version', 'step-scheme')">Далее</button>
+    </section>
+
+    <!-- Шаг 5: Схема кластера -->
+    <section id="step-scheme" style="display: none;">
+      <h2>5. Схема кластера</h2>
+      <div>
+        <input type="radio" id="schemeMirror" name="clusterScheme" value="mirror-3-dc" checked>
+        <label for="schemeMirror">mirror-3-dc (3 копии, 3 DC)</label>
+      </div>
+      <div>
+        <input type="radio" id="schemeBridge" name="clusterScheme" value="bridge-2-dc">
+        <label for="schemeBridge">bridge-2-dc (2 копии, 2 DC)</label>
+      </div>
+      <div>
+        <input type="radio" id="schemeBlock" name="clusterScheme" value="block-4-2">
+        <label for="schemeBlock">block-4-2 (4 данных + 2 parity)</label>
+      </div>
+      <button onclick="prevStep('step-scheme', 'step-version')">Назад</button>
+      <button onclick="generateConfig()">Сформировать конфигурацию</button>
+    </section>
+
+    <!-- Итог -->
+    <section id="result" style="display: none;">
+      <h2>Готовая конфигурация</h2>
+      <pre id="configOutput"></pre>
+      <button onclick="downloadConfig()">Скачать config.json</button>
+      <button onclick="resetForm()">Начать заново</button>
+    </section>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
