@@ -1,0 +1,15 @@
+# Результаты scripts/build-installer.sh. Правила лежат в корне площадки,
+# чтобы в installer/ и ansible-collection/ не появлялись чужие ignore.
+
+/dist/
+/.build-installer/
+
+/installer/ydb-installer
+/installer/ydb.log
+/installer/ui/node_modules/
+/installer/internal/embed/dist/
+/installer/.runtime-build/
+/installer/artefacts/
+/installer/coverage.out
+/installer/coverage-go.html
+/installer/ui/coverage/
