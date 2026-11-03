@@ -12,8 +12,6 @@ const (
 // Keep in sync with scripts/runtime.lock.
 const (
 	ydbCollectionGit = "git+https://github.com/ydb-platform/ydb-ansible"
-	// EM collection lives under a subdirectory of the ydb-em repo.
-	emCollectionGit = "git+https://github.com/ydb-platform/ydb-em#/ansible/ydb_platform/ydb_em"
 )
 
 type InstructionProvider struct{}
@@ -29,14 +27,12 @@ func (p *InstructionProvider) ForDep(dep, os string) string {
 		return p.ansibleInstructions(os)
 	case "ydb_platform.ydb":
 		return p.ydbCollectionInstructions(os)
-	case "ydb_platform.ydb_em":
-		return p.emCollectionInstructions(os)
 	}
 	return ""
 }
 
 func (p *InstructionProvider) AllInstructions(os string) map[string]string {
-	deps := []string{"python", "ansible", "ydb_platform.ydb", "ydb_platform.ydb_em"}
+	deps := []string{"python", "ansible", "ydb_platform.ydb"}
 	result := make(map[string]string, len(deps))
 	for _, dep := range deps {
 		result[dep] = p.ForDep(dep, os)
@@ -91,15 +87,4 @@ func (p *InstructionProvider) ydbCollectionInstructions(os string) string {
 # Requires Ansible to be installed first
 # ydb_platform.ydb is installed from git (not Ansible Galaxy)
 ansible-galaxy collection install ` + ydbCollectionGit)
-}
-
-func (p *InstructionProvider) emCollectionInstructions(os string) string {
-	_ = os
-	return strings.TrimSpace(`
-# Requires Ansible to be installed first
-# ydb_platform.ydb_em is not on Galaxy; install from git (subdirectory fragment)
-ansible-galaxy collection install ` + emCollectionGit + `
-
-# EM playbooks need PyYAML on the Ansible control node
-pip3 install pyyaml`)
 }

@@ -10,7 +10,7 @@ export interface DatabaseEntryUI {
   affinity: string
 }
 
-export type ConfigVariant = 'single' | 'single-plus-em' | 'multiple'
+export type ConfigVariant = 'single' | 'multiple'
 
 interface DatabasesState {
   configVariant: ConfigVariant
@@ -19,8 +19,6 @@ interface DatabasesState {
   nextId: number
   savedPerVariant: Record<string, DatabaseEntryUI[]>
 }
-
-export const DEFAULT_EM_DB_NAME = 'ydb_em'
 
 function createEntry(id: number, name = 'database'): DatabaseEntryUI {
   return {
@@ -37,15 +35,6 @@ function cloneEntries(entries: DatabaseEntryUI[]): DatabaseEntryUI[] {
   return entries.map(e => ({ ...e, hosts: [...e.hosts] }))
 }
 
-function createSinglePlusEmEntries(userSeed?: DatabaseEntryUI): DatabaseEntryUI[] {
-  const user = userSeed
-    ? { ...userSeed, hosts: [...userSeed.hosts] }
-    : createEntry(1, 'database')
-  user.id = 1
-  const em = createEntry(2, DEFAULT_EM_DB_NAME)
-  return [user, em]
-}
-
 export const useDatabasesStore = defineStore('databases', {
   state: (): DatabasesState => ({
     configVariant: 'single',
@@ -57,9 +46,6 @@ export const useDatabasesStore = defineStore('databases', {
 
   getters: {
     canProceed: (state) => {
-      if (state.configVariant === 'single-plus-em' && state.entries.length !== 2) {
-        return false
-      }
       if (state.entries.length === 0) return false
       if (state.entries.some((e) => !e.name.trim())) return false
       if (state.coresDynamic <= 0) return false
@@ -99,24 +85,15 @@ export const useDatabasesStore = defineStore('databases', {
     /**
      * Total dynamic cores per host across ALL database entries.
      * Equals coresDynamic × entries.length because each database entry
-     * allocates its own dynamic nodes (including single-plus-em's two DBs).
+     * allocates its own dynamic nodes.
      */
     totalDynamicPerHost: (state): number => {
       if (state.coresDynamic <= 0) return 0
       return state.coresDynamic * state.entries.length
     },
 
-    emEntry(state): DatabaseEntryUI | null {
-      if (state.configVariant !== 'single-plus-em') return null
-      return state.entries[1] ?? null
-    },
-
     userEntry(state): DatabaseEntryUI | null {
       return state.entries[0] ?? null
-    },
-
-    isSinglePlusEm(state): boolean {
-      return state.configVariant === 'single-plus-em'
     },
   },
 
@@ -125,7 +102,7 @@ export const useDatabasesStore = defineStore('databases', {
       if (inv.database) {
         const db = inv.database
         this.coresDynamic = db.cores_dynamic ?? 0
-        this.configVariant = (db.config_variant as ConfigVariant) || 'single'
+        this.configVariant = db.config_variant === 'multiple' ? 'multiple' : 'single'
 
         if (db.entries && db.entries.length > 0) {
           this.entries = db.entries.map((entry: DatabaseEntry, idx: number) => ({
@@ -136,17 +113,7 @@ export const useDatabasesStore = defineStore('databases', {
             hostMode: entry.hosts && entry.hosts.length > 0 ? 'select' : 'all',
             affinity: entry.affinity || '',
           }))
-          if (this.configVariant === 'single-plus-em') {
-            if (this.entries.length === 1) {
-              this.entries.push(createEntry(2, DEFAULT_EM_DB_NAME))
-            } else if (this.entries.length >= 2) {
-              this.entries[1].name = DEFAULT_EM_DB_NAME
-            }
-          }
           this.nextId = this.entries.length + 1
-        } else if (this.configVariant === 'single-plus-em') {
-          this.entries = createSinglePlusEmEntries()
-          this.nextId = 3
         } else {
           this.entries = [createEntry(1)]
           this.nextId = 2
@@ -168,23 +135,12 @@ export const useDatabasesStore = defineStore('databases', {
       if (saved && saved.length > 0) {
         this.entries = cloneEntries(saved)
         this.nextId = Math.max(...saved.map(e => e.id)) + 1
-        if (variant === 'single-plus-em') {
-          if (this.entries.length !== 2) {
-            this.entries = createSinglePlusEmEntries(this.entries[0])
-            this.nextId = 3
-          } else {
-            this.entries[1].name = DEFAULT_EM_DB_NAME
-          }
-        }
         return
       }
 
       if (variant === 'single') {
         this.entries = [this.entries[0] ? { ...this.entries[0], hosts: [...this.entries[0].hosts], id: 1 } : createEntry(1)]
         this.nextId = 2
-      } else if (variant === 'single-plus-em') {
-        this.entries = createSinglePlusEmEntries(this.entries[0])
-        this.nextId = 3
       } else if (variant === 'multiple') {
         if (this.entries.length < 2) {
           if (this.entries.length === 0) {
@@ -198,12 +154,12 @@ export const useDatabasesStore = defineStore('databases', {
     },
 
     addEntry() {
-      if (this.configVariant === 'single-plus-em' || this.configVariant === 'single') return
+      if (this.configVariant === 'single') return
       this.entries.push(createEntry(this.nextId++))
     },
 
     removeEntry(index: number) {
-      if (this.configVariant === 'single-plus-em' || this.configVariant === 'single') return
+      if (this.configVariant === 'single') return
       if (this.entries.length > 1) {
         this.entries.splice(index, 1)
       }

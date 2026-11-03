@@ -212,17 +212,13 @@ func (s *InstallState) StopLogging() {}
 // and status.
 type OperationStates struct {
 	Install   *InstallState
-	InstallEM *InstallState
 	DeleteYdb *InstallState
-	DeleteEM  *InstallState
 }
 
 func NewOperationStates() *OperationStates {
 	return &OperationStates{
 		Install:   NewInstallState(),
-		InstallEM: NewInstallState(),
 		DeleteYdb: NewInstallState(),
-		DeleteEM:  NewInstallState(),
 	}
 }
 
@@ -231,12 +227,8 @@ func (s *OperationStates) ForFlow(flow Flow) *InstallState {
 	switch flow {
 	case FlowYDB:
 		return s.Install
-	case FlowYDBEM:
-		return s.InstallEM
 	case FlowDeleteYDB:
 		return s.DeleteYdb
-	case FlowDeleteEMYDB:
-		return s.DeleteEM
 	default:
 		return nil
 	}

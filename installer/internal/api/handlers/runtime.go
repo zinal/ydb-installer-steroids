@@ -19,12 +19,6 @@ type RuntimeInfo struct {
 	AnsibleCore string `json:"ansible_core,omitempty"`
 	// Collection is the bundled ydb_platform.ydb collection version.
 	Collection string `json:"collection,omitempty"`
-	// EMCollection is the bundled ydb_platform.ydb_em collection version
-	// (used by the YDB EM install flow).
-	EMCollection string `json:"em_collection,omitempty"`
-	// ShowEMScenarios enables the YDB EM installation scenarios (ydb-em
-	// wizard and EM delete) in the UI. Off by default, hiding their entry points.
-	ShowEMScenarios bool `json:"show_em_scenarios"`
 	// Path is the resolved runtime root on disk (empty if not extracted).
 	Path string `json:"path,omitempty"`
 	// Error carries a non-fatal extraction/resolution error message, if any.

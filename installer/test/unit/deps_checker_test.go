@@ -53,13 +53,13 @@ func TestExtractVersion(t *testing.T) {
 	}
 }
 
-// TestDepsChecker_ReturnsFourDeps verifies that system-mode Check() always
-// returns four dependency entries in the correct order (includes ydb_em).
-func TestDepsChecker_ReturnsFourDeps(t *testing.T) {
+// TestDepsChecker_ReturnsThreeDeps verifies that system-mode Check() always
+// returns three dependency entries in the correct order.
+func TestDepsChecker_ReturnsThreeDeps(t *testing.T) {
 	c := &checker.DepsChecker{}
 	deps := c.Check()
 
-	expectedNames := []string{"python", "ansible", "ydb_platform.ydb", "ydb_platform.ydb_em"}
+	expectedNames := []string{"python", "ansible", "ydb_platform.ydb"}
 	if len(deps) != len(expectedNames) {
 		t.Fatalf("expected %d dependencies, got %d", len(expectedNames), len(deps))
 	}

@@ -8,7 +8,7 @@ import (
 
 // TestDepsChecker_BundledMode verifies that, when a bundled runtime is set, the
 // checker reports the dependencies as satisfied by the bundle without probing
-// the host. EMCollection is empty here, so only the original three appear.
+// the host.
 func TestDepsChecker_BundledMode(t *testing.T) {
 	c := &checker.DepsChecker{Bundled: &checker.BundledInfo{
 		Python:      "3.12.5",
@@ -49,62 +49,6 @@ func TestDepsChecker_BundledMode(t *testing.T) {
 	}
 }
 
-// TestDepsChecker_BundledReportsEMCollection verifies the EM collection is
-// reported as a fourth bundled dependency when the runtime carries it.
-func TestDepsChecker_BundledReportsEMCollection(t *testing.T) {
-	c := &checker.DepsChecker{Bundled: &checker.BundledInfo{
-		Python:       "3.12.5",
-		Ansible:      "10.3.0",
-		AnsibleCore:  "2.17.3",
-		Collection:   "1.2.3",
-		EMCollection: "1.0.13",
-	}}
-
-	deps := c.Check()
-	if len(deps) != 4 {
-		t.Fatalf("expected 4 deps when the EM collection is bundled, got %d", len(deps))
-	}
-
-	var em *checker.Dependency
-	for i := range deps {
-		if deps[i].Name == "ydb_platform.ydb_em" {
-			em = &deps[i]
-			break
-		}
-	}
-	if em == nil {
-		t.Fatal("ydb_platform.ydb_em should be reported when bundled")
-	}
-	if em.Version != "1.0.13" {
-		t.Errorf("em collection version = %q, want 1.0.13", em.Version)
-	}
-	if !em.OK || !em.Installed {
-		t.Error("bundled em collection should be OK and Installed")
-	}
-	if em.Source != checker.SourceBundled {
-		t.Errorf("em collection source = %q, want %q", em.Source, checker.SourceBundled)
-	}
-}
-
-// TestDepsChecker_BundledOmitsMissingEMCollection verifies that a runtime built
-// before EM bundling keeps the original three-dependency shape rather than
-// advertising a collection it does not ship.
-func TestDepsChecker_BundledOmitsMissingEMCollection(t *testing.T) {
-	c := &checker.DepsChecker{Bundled: &checker.BundledInfo{
-		Python:       "3.12.5",
-		Ansible:      "10.3.0",
-		AnsibleCore:  "2.17.3",
-		Collection:   "1.2.3",
-		EMCollection: "",
-	}}
-
-	for _, d := range c.Check() {
-		if d.Name == "ydb_platform.ydb_em" {
-			t.Fatal("ydb_platform.ydb_em must not be reported when not bundled")
-		}
-	}
-}
-
 // TestDepsChecker_BundledAnsibleFallsBackToCore verifies ansible version falls
 // back to ansible-core when the community package version is empty.
 func TestDepsChecker_BundledAnsibleFallback(t *testing.T) {
@@ -122,12 +66,12 @@ func TestDepsChecker_BundledAnsibleFallback(t *testing.T) {
 	}
 }
 
-// TestDepsChecker_SystemModeIncludesEMCollection verifies the non-bundled path
-// probes four named deps including ydb_platform.ydb_em.
-func TestDepsChecker_SystemModeIncludesEMCollection(t *testing.T) {
+// TestDepsChecker_SystemModeNames verifies the non-bundled path probes python,
+// ansible, and the ydb collection.
+func TestDepsChecker_SystemModeNames(t *testing.T) {
 	c := &checker.DepsChecker{} // Bundled == nil
 	deps := c.Check()
-	want := []string{"python", "ansible", "ydb_platform.ydb", "ydb_platform.ydb_em"}
+	want := []string{"python", "ansible", "ydb_platform.ydb"}
 	if len(deps) != len(want) {
 		t.Fatalf("expected %d deps in system mode, got %d", len(want), len(deps))
 	}

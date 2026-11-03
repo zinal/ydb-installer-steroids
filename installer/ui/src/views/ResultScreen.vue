@@ -9,7 +9,6 @@ import { useHostsStore } from '@/stores/hosts'
 import { useDistributionStore } from '@/stores/distribution'
 import { useYdbConfigStore } from '@/stores/ydbConfig'
 import { useDatabasesStore } from '@/stores/databases'
-import { useEmStore } from '@/stores/em'
 import ResultSummary from '@/components/common/ResultSummary.vue'
 import ScreenEyebrow from '@/components/common/ScreenEyebrow.vue'
 
@@ -25,7 +24,6 @@ const hosts = useHostsStore()
 const distribution = useDistributionStore()
 const ydbConfig = useYdbConfigStore()
 const databases = useDatabasesStore()
-const emStore = useEmStore()
 
 onMounted(async () => {
   await install.waitForRecovery()
@@ -51,17 +49,6 @@ const clusterInfo = computed(() => ({
     ? `/${ydbConfig.domain}/${databases.entries[0].name}`
     : 'N/A',
 }))
-
-const emHostsList = computed(() =>
-  emStore.hosts.map(h => h.fqdn.trim()).filter(Boolean),
-)
-
-const emUiUrl = computed(() => {
-  const host = emHostsList.value[0]
-  return host ? `https://${host}:8080` : ''
-})
-
-const showEmSection = computed(() => session.showEmStep && isSuccess.value)
 
 const dcEntries = computed(() => {
   const entries: { label: string; hosts: string[] }[] = []
@@ -208,57 +195,17 @@ function goBack() {
             <div class="section-label mb-4">{{ t('result.createdDatabases') }}</div>
             <div class="db-list">
               <div
-                v-for="(entry, i) in databases.entries"
-                :key="i"
+                v-for="entry in databases.entries"
+                :key="entry.name"
                 class="db-item"
               >
                 <v-icon size="16" color="success" class="mr-2">mdi-check-circle</v-icon>
                 <span class="db-name">{{ entry.name }}</span>
-                <v-chip
-                  v-if="session.showEmStep && i === 1"
-                  size="x-small"
-                  color="primary"
-                  variant="tonal"
-                  class="ml-2"
-                >
-                  {{ t('result.emDbBadge') }}
-                </v-chip>
                 <v-spacer />
                 <span class="text-caption text-medium-emphasis">
                   {{ t('result.groupsCount', { count: entry.groups }) }}
                 </span>
               </div>
-            </div>
-          </v-card>
-
-          <v-card v-if="showEmSection" class="section-card pa-6 mb-4">
-            <div class="section-label mb-4">{{ t('result.emSection') }}</div>
-            <template v-if="isSuccess">
-              <div class="section-sublabel mb-3">{{ t('result.emHosts') }}</div>
-              <div class="hosts-list mb-4">
-                <div
-                  v-for="(host, idx) in emHostsList"
-                  :key="idx"
-                  class="host-item"
-                >
-                  <v-icon size="16" color="success" class="mr-2">mdi-check-circle</v-icon>
-                  <span class="host-name">{{ host }}</span>
-                </div>
-                <div v-if="emHostsList.length === 0" class="text-medium-emphasis">
-                  {{ t('result.noEmHosts') }}
-                </div>
-              </div>
-              <div v-if="emUiUrl" class="ydb-ui-row">
-                <v-icon size="16" class="mr-2 text-primary">mdi-open-in-new</v-icon>
-                <span class="info-key">{{ t('result.emUi') }}:</span>
-                <a :href="emUiUrl" target="_blank" class="ui-link" rel="noopener noreferrer">
-                  {{ emUiUrl }}
-                  <v-icon size="14" class="ml-1">mdi-open-in-new</v-icon>
-                </a>
-              </div>
-            </template>
-            <div v-else class="text-medium-emphasis">
-              {{ t('result.emNotInstalled') }}
             </div>
           </v-card>
         </template>

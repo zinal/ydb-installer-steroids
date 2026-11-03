@@ -439,20 +439,7 @@ func (s *InventoryService) extractDatabaseConfig(vars map[string]interface{}) *m
 	}
 
 	if dbs, ok := vars["ydb_databases"].([]interface{}); ok && len(dbs) > 0 {
-		if len(dbs) == 2 {
-			// Heuristic: single-plus-em uses "ydb_em" as the second DB name.
-			if db2, ok2 := dbs[1].(map[string]interface{}); ok2 {
-				if name, _ := db2["name"].(string); name == "ydb_em" {
-					dbConfig.ConfigVariant = "single-plus-em"
-				} else {
-					dbConfig.ConfigVariant = "multiple"
-				}
-			} else {
-				dbConfig.ConfigVariant = "multiple"
-			}
-		} else {
-			dbConfig.ConfigVariant = "multiple"
-		}
+		dbConfig.ConfigVariant = "multiple"
 		for _, db := range dbs {
 			if dbMap, ok := db.(map[string]interface{}); ok {
 				de := models.DatabaseEntry{}

@@ -1,6 +1,5 @@
 // Package runtime manages the embedded, self-contained Ansible control-node
-// runtime (Python + Ansible + the ydb_platform.ydb and ydb_platform.ydb_em
-// collections).
+// runtime (Python + Ansible + the ydb_platform.ydb collection).
 //
 // The installer ships this runtime inside the binary. On first launch it is
 // extracted to a version-stamped cache directory next to the binary, and all

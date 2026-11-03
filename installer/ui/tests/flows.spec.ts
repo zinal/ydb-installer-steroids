@@ -3,22 +3,10 @@ import { FLOWS } from '@/config/flows'
 import { OPERATIONS } from '@/config/operations'
 
 describe('flows', () => {
-  it('defines all four flows', () => {
+  it('defines the install and delete flows', () => {
     expect(FLOWS).toHaveProperty('ydb')
-    expect(FLOWS).toHaveProperty('ydb-em')
     expect(FLOWS).toHaveProperty('delete-ydb')
-    expect(FLOWS).toHaveProperty('delete-em-ydb')
-  })
-
-  it('step 7.1 is only present in the ydb flow', () => {
-    for (const [name, steps] of Object.entries(FLOWS)) {
-      const ids = steps.map(s => s.id)
-      if (name === 'ydb') {
-        expect(ids).toContain('7.1')
-      } else {
-        expect(ids).not.toContain('7.1')
-      }
-    }
+    expect(Object.keys(FLOWS)).toEqual(['ydb', 'delete-ydb'])
   })
 
   it('every flow starts with step 1', () => {
@@ -29,11 +17,10 @@ describe('flows', () => {
 })
 
 describe('operations', () => {
-  it('covers all four flows', () => {
+  it('covers the install and delete flows', () => {
     expect(OPERATIONS).toHaveProperty('ydb')
-    expect(OPERATIONS).toHaveProperty('ydb-em')
     expect(OPERATIONS).toHaveProperty('delete-ydb')
-    expect(OPERATIONS).toHaveProperty('delete-em-ydb')
+    expect(Object.keys(OPERATIONS)).toEqual(['ydb', 'delete-ydb'])
   })
 
   it('every operation has a startEndpoint', () => {

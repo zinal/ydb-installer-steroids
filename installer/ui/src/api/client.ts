@@ -1,6 +1,6 @@
 import type { Session, SessionUpdate } from '@/types/session'
 import type { InstallState, InstructionResponse } from '@/types/install'
-import type { InventoryResponse, InventoryData, InventoryUpdateResponse, EMConfig, EMInventoryResponse, EMInventoryUpdateResponse, SSHConfig } from '@/types/inventory'
+import type { InventoryResponse, InventoryData, InventoryUpdateResponse, SSHConfig } from '@/types/inventory'
 import type { CheckHostsResponse } from '@/types/hosts'
 import type { GetDisksResponse } from '@/types/disks'
 
@@ -53,10 +53,6 @@ export const api = {
   updateInventory: (data: InventoryData) =>
     request<InventoryUpdateResponse>('/api/inventory', { method: 'PUT', body: JSON.stringify(data) }),
 
-  getEMInventory: () => request<EMInventoryResponse>('/api/em-inventory'),
-  updateEMInventory: (data: EMConfig) =>
-    request<EMInventoryUpdateResponse>('/api/em-inventory', { method: 'PUT', body: JSON.stringify(data) }),
-
   checkHosts: (hosts: string[], ssh: any, ports?: number[]) =>
     request<CheckHostsResponse>('/api/hosts/check', { method: 'POST', body: JSON.stringify({ hosts, ssh, ports }) }),
 
@@ -70,9 +66,7 @@ export const api = {
 
   deleteYdbStart: () =>
     request<{ status: string }>('/api/install/delete-ydb/start', { method: 'POST' }),
-  deleteEmYdbStart: () =>
-    request<{ status: string }>('/api/install/delete-em-ydb/start', { method: 'POST' }),
-  /** Optional op overrides session flow (e.g. 'ydb-em' during ydb-flow phase 9.1). */
+  /** Optional op overrides the session flow. */
   getInstallStatus: (op?: string) =>
     request<InstallState>(op ? `/api/install/status?op=${encodeURIComponent(op)}` : '/api/install/status'),
   cancelInstall: (op?: string) =>
@@ -222,10 +216,6 @@ export interface RuntimeInfo {
   ansible?: string
   ansible_core?: string
   collection?: string
-  /** Bundled ydb_platform.ydb_em collection version (YDB EM install flow). */
-  em_collection?: string
-  /** Enables YDB EM scenarios (ydb-em wizard, EM delete) in the UI. */
-  show_em_scenarios?: boolean
   path?: string
   error?: string
 }

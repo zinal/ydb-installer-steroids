@@ -46,7 +46,6 @@ restore_placeholder() {
   "ansible": "",
   "ansible_core": "",
   "collection": "",
-  "em_collection": "",
   "sha256": "",
   "collections_subdir": "collections",
   "root_subdir": "python"

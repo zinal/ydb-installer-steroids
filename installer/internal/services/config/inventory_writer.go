@@ -322,7 +322,7 @@ func (w *InventoryWriter) buildVars(data *models.InventoryData) map[string]inter
 				vars["ydb_database_groups"] = primary.Groups
 			}
 
-			// Structured ydb_databases field for multiple and single-plus-em variants.
+			// Structured ydb_databases field for the multiple-database variant.
 			if data.Database.ConfigVariant != "single" && len(data.Database.Entries) > 1 {
 				dbs := make([]map[string]interface{}, len(data.Database.Entries))
 				for i, entry := range data.Database.Entries {

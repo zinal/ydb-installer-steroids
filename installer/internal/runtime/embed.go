@@ -23,15 +23,11 @@ const (
 )
 
 type Metadata struct {
-	Embedded    bool   `json:"embedded"`
-	Python      string `json:"python"`
-	Ansible     string `json:"ansible"`
-	AnsibleCore string `json:"ansible_core"`
-	Collection  string `json:"collection"`
-	// EMCollection is required by the EM install flow (screen 24). Empty on
-	// placeholder builds and on runtimes built before the EM collection was
-	// bundled.
-	EMCollection      string `json:"em_collection"`
+	Embedded          bool   `json:"embedded"`
+	Python            string `json:"python"`
+	Ansible           string `json:"ansible"`
+	AnsibleCore       string `json:"ansible_core"`
+	Collection        string `json:"collection"`
 	SHA256            string `json:"sha256"`
 	CollectionsSubdir string `json:"collections_subdir"`
 	RootSubdir        string `json:"root_subdir"`

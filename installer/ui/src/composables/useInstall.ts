@@ -34,8 +34,6 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectAttempt = 0
 let cancelling = false
-let operationOp: string | undefined
-
 let recoveryAttempted = false
 let recoveryPromise: Promise<void> | null = null
 
@@ -88,8 +86,7 @@ function connectSSE() {
 
   try {
     const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
-    const qs = operationOp ? `?op=${encodeURIComponent(operationOp)}` : ''
-    const url = `${protocol}//${window.location.host}/ws/logs${qs}`
+    const url = `${protocol}//${window.location.host}/ws/logs`
     es = new EventSource(url)
 
     es.onopen = () => {
@@ -135,7 +132,7 @@ function connectWithBackoff() {
   logStatus.value = 'reconnecting'
 
   try {
-    ws = createLogsWebSocket(operationOp)
+    ws = createLogsWebSocket()
   } catch {
     scheduleReconnect()
     return
@@ -175,7 +172,7 @@ function startPolling() {
   pollTimer = setInterval(async () => {
     if (cancelling) return
     try {
-      const state = await api.getInstallStatus(operationOp)
+      const state = await api.getInstallStatus()
       status.value = state.status
       progress.value = state.progress
       tasks.value = state.tasks ?? []
@@ -212,20 +209,15 @@ export function resetInstallState() {
   logStatus.value = 'none'
   logsRecovered.value = false
   recoveryInProgress.value = false
-  operationOp = undefined
   recoveryAttempted = false
   recoveryPromise = null
   stopPolling()
   disconnectAll()
 }
 
-function setOperationOp(op: string | undefined) {
-  operationOp = op || undefined
-}
-
 async function recoverState(): Promise<void> {
   try {
-    const state = await api.getInstallStatus(operationOp)
+    const state = await api.getInstallStatus()
 
     if (state.status === 'idle') {
       return
@@ -312,7 +304,7 @@ async function cancel() {
   disconnectAll()
 
   try {
-    await api.cancelInstall(operationOp)
+    await api.cancelInstall()
   } catch {
   }
 }
@@ -325,7 +317,7 @@ async function recoverLogs() {
   recoveryInProgress.value = true
   logStatus.value = 'recovering'
   try {
-    const data = await api.getInstallLogs(operationOp)
+    const data = await api.getInstallLogs()
     if (data.logs && data.logs.length > 0) {
       logs.value = [...data.logs]
       logsRecovered.value = true
@@ -414,12 +406,7 @@ async function generateConfig(skipBackup: boolean = false) {
 }
 
 async function startYdbInstall() {
-  operationOp = undefined
   await start(OPERATIONS.ydb.startEndpoint)
-}
-
-async function startEmInstall() {
-  await start(OPERATIONS['ydb-em'].startEndpoint)
 }
 
 async function installWithExistingConfig() {
@@ -492,11 +479,9 @@ export function useInstall() {
     fetchConfigStatus,
     generateConfig,
     startYdbInstall,
-    startEmInstall,
     installWithExistingConfig,
     restartInstallation,
     connectWithBackoff,
     disconnectAll,
-    setOperationOp,
   }
 }

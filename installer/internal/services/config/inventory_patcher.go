@@ -49,29 +49,6 @@ var ManagedVarsKeySet = map[string]bool{
 	"ydb_topology":                           true,
 }
 
-// EMManagedVarsKeySet defines the set of variable keys that the installer manages
-// in the EM inventory file (90-inventory.yaml). Keys not in this set are
-// preserved as-is from the original file.
-var EMManagedVarsKeySet = map[string]bool{
-	"ydb_em_frontend":               true,
-	"ydb_em_cluster_name":           true,
-	"ydb_em_cluster_balancer":       true,
-	"ydb_em_db_connection_db_root":  true,
-	"ydb_em_db_connection_db":       true,
-	"ydb_em_db_connection_endpoint": true,
-	"ydb_em_cp_connection_endpoint": true,
-	"ydb_em_archive":                true,
-	"ydb_em_meta_ui_archive":        true,
-	"ydb_em_meta_ui_binary":         true,
-	"ydb_em_cp_binary":              true,
-	"ydb_em_cp_agent_binary":        true,
-	"ydb_em_agent_cpu":              true,
-	"ydb_em_agent_memory":           true,
-	"ydb_em_az_locations":           true,
-	"ydb_em_cp_presets":             true,
-	"ydb_use_dynamic_config":        true,
-}
-
 // alwaysPresentEntry represents a key-value default that the installer
 // ensures is present in the inventory vars section.
 type alwaysPresentEntry struct {
@@ -95,32 +72,6 @@ var YdbAlwaysPresentKeys = []alwaysPresentEntry{
 		"pool.ntp.org",
 	}},
 	{Key: "ydbops_local", Value: true},
-}
-
-// EmAlwaysPresentKeys defines defaults injected into 90-inventory.yaml.
-// Most EM defaults are produced by the writer in buildVars(); this list carries
-// the ones that must exist on disk but are NOT part of the EMConfig model, and
-// therefore must never be overwritten once the user edits them.
-var EmAlwaysPresentKeys = []alwaysPresentEntry{
-	{Key: "ydb_em_cp_presets", Value: DefaultCPPresets()},
-}
-
-// ApplyAlwaysPresentToVars injects always-present defaults into a plain vars
-// map, adding each key only when it is not already present.
-//
-// The fresh-write paths marshal a vars map directly and never invoke the
-// patcher, so without this the always-present defaults would only ever appear
-// in files that already existed.
-func ApplyAlwaysPresentToVars(vars map[string]interface{}, entries []alwaysPresentEntry) map[string]interface{} {
-	if vars == nil {
-		vars = make(map[string]interface{})
-	}
-	for _, entry := range entries {
-		if _, exists := vars[entry.Key]; !exists {
-			vars[entry.Key] = entry.Value
-		}
-	}
-	return vars
 }
 
 // InventoryPatcher performs surgical updates to an existing inventory.yaml file,
@@ -295,8 +246,7 @@ func (p *InventoryPatcher) deleteVar(mapping *yaml.Node, key string) {
 // (either from the original YAML or from managedVars).
 //
 // Callers control which defaults are applied by passing the appropriate
-// alwaysPresent slice (e.g. ydbAlwaysPresentKeys for 50-inventory,
-// emAlwaysPresentKeys for 90-inventory).
+// alwaysPresent slice (YdbAlwaysPresentKeys for 50-inventory.yaml).
 func (p *InventoryPatcher) applyAlwaysPresent(varsNode *yaml.Node, managedVars map[string]interface{}, alwaysPresent []alwaysPresentEntry) {
 	if varsNode == nil {
 		return

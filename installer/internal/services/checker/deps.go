@@ -28,8 +28,6 @@ type BundledInfo struct {
 	Ansible     string
 	AnsibleCore string
 	Collection  string
-	// EMCollection is empty when the runtime predates EM bundling.
-	EMCollection string
 }
 
 type DepsChecker struct {
@@ -38,7 +36,7 @@ type DepsChecker struct {
 
 // Check runs all dependency probes. When a bundled runtime is configured,
 // dependencies are reported as satisfied by the bundle. In system mode,
-// python, ansible, and both Ansible collections are probed on the host.
+// python, ansible, and the ydb_platform.ydb collection are probed on the host.
 func (c *DepsChecker) Check() []Dependency {
 	if c.Bundled != nil {
 		return c.bundledDeps()
@@ -47,31 +45,20 @@ func (c *DepsChecker) Check() []Dependency {
 		c.checkPython(),
 		c.checkAnsible(),
 		c.checkAnsibleCollection("ydb_platform.ydb"),
-		c.checkAnsibleCollection("ydb_platform.ydb_em"),
 	}
 }
 
-// bundledDeps reports ydb_platform.ydb_em only when the bundle actually carries
-// it, so runtimes built before EM bundling keep the original three-dependency
-// shape instead of advertising a collection that is not there.
 func (c *DepsChecker) bundledDeps() []Dependency {
 	b := c.Bundled
 	ansibleVer := b.Ansible
 	if ansibleVer == "" {
 		ansibleVer = b.AnsibleCore
 	}
-	deps := []Dependency{
+	return []Dependency{
 		{Name: "python", OK: true, Installed: true, Required: ">=3.8", Version: b.Python, Source: SourceBundled},
 		{Name: "ansible", OK: true, Installed: true, Required: ">=2.12", Version: ansibleVer, Source: SourceBundled},
 		{Name: "ydb_platform.ydb", OK: true, Installed: true, Required: "any", Version: b.Collection, Source: SourceBundled},
 	}
-	if b.EMCollection != "" {
-		deps = append(deps, Dependency{
-			Name: "ydb_platform.ydb_em", OK: true, Installed: true,
-			Required: "any", Version: b.EMCollection, Source: SourceBundled,
-		})
-	}
-	return deps
 }
 
 func (c *DepsChecker) checkPython() Dependency {
@@ -136,8 +123,8 @@ func (c *DepsChecker) checkAnsibleCollection(name string) Dependency {
 	}
 
 	text := string(out)
-	// Match the FQCN as the first field on a line so "ydb_platform.ydb" does not
-	// false-positive against "ydb_platform.ydb_em".
+	// Match the FQCN as the first field on a line so a shorter name does not
+	// match a longer collection that shares its prefix.
 	line := collectionListLine(text, name)
 	if line == "" || strings.Contains(strings.ToLower(text), "unable to find") {
 		dep.OK = false

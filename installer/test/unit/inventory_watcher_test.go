@@ -51,21 +51,6 @@ func TestInventoryFileWatcher_NotifiesOnInventoryWrite(t *testing.T) {
 	}
 }
 
-func TestInventoryFileWatcher_NotifiesOnEMInventoryWrite(t *testing.T) {
-	fw, dir := newFileWatcher(t)
-	ch := fw.AddListener()
-
-	// 90-inventory.yaml events must also trigger listeners.
-	target := filepath.Join(dir, "inventory", "90-inventory.yaml")
-	if err := os.WriteFile(target, []byte("all: {}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if !waitForNotification(t, ch, 3*time.Second) {
-		t.Fatal("timed out waiting for EM inventory change notification")
-	}
-}
-
 func TestInventoryFileWatcher_IgnoresUnrelatedFiles(t *testing.T) {
 	fw, dir := newFileWatcher(t)
 	ch := fw.AddListener()

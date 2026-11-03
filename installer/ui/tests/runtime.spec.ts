@@ -20,7 +20,6 @@ describe('runtime store', () => {
     const s = useRuntimeStore()
     expect(s.embedded).toBe(false)
     expect(s.extracted).toBe(false)
-    expect(s.showEmScenarios).toBe(false)
     expect(s.bundleActive).toBe(false)
     expect(s.loaded).toBe(false)
   })
@@ -47,27 +46,6 @@ describe('runtime store', () => {
     expect(s.path).toBe('/tmp/rt/python')
     expect(s.loaded).toBe(true)
     expect(s.bundleActive).toBe(true)
-  })
-
-  it('load() sets showEmScenarios from the API flag', async () => {
-    vi.mocked(api.getRuntimeInfo).mockResolvedValue({
-      embedded: true,
-      extracted: true,
-      show_em_scenarios: true,
-    })
-    const s = useRuntimeStore()
-    await s.load()
-    expect(s.showEmScenarios).toBe(true)
-  })
-
-  it('showEmScenarios defaults to false when the flag is absent', async () => {
-    vi.mocked(api.getRuntimeInfo).mockResolvedValue({
-      embedded: true,
-      extracted: true,
-    })
-    const s = useRuntimeStore()
-    await s.load()
-    expect(s.showEmScenarios).toBe(false)
   })
 
   it('bundleActive is false when not extracted', async () => {

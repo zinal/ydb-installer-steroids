@@ -16,29 +16,14 @@ export const FLOWS: Record<Exclude<Flow, ''>, FlowStep[]> = {
     { id: '5', i18nKey: 'distribution' },
     { id: '6', i18nKey: 'config' },
     { id: '7', i18nKey: 'databases' },
-    { id: '7.1', i18nKey: 'ydbEm' },
     { id: '8', i18nKey: 'tls' },
     { id: '9', i18nKey: 'install' },
     { id: '10', i18nKey: 'result' },
-  ],
-  'ydb-em': [
-    { id: '1', i18nKey: 'intro' },
-    { id: '20', i18nKey: 'emHosts' },
-    { id: '21', i18nKey: 'emParams' },
-    { id: '22', i18nKey: 'emDistribution' },
-    { id: '23', i18nKey: 'emTls' },
-    { id: '24', i18nKey: 'emInstall' },
-    { id: '25', i18nKey: 'emResult' },
   ],
   'delete-ydb': [
     { id: '1', i18nKey: 'intro' },
     { id: '30', i18nKey: 'deleteConfirm' },
     { id: '31', i18nKey: 'deleteProgress' },
-  ],
-  'delete-em-ydb': [
-    { id: '1', i18nKey: 'intro' },
-    { id: '32', i18nKey: 'deleteEmConfirm' },
-    { id: '33', i18nKey: 'deleteEmProgress' },
   ],
 }
 
@@ -54,7 +39,6 @@ export function flowSteps(flow: Flow): FlowStep[] {
 
 /** All step IDs that have a route — used to register placeholder views. */
 export const ALL_STEP_IDS: string[] = [
-  '1', '2', '3', '4', '5', '6', '7', '7.1', '8', '9', '10',
-  '20', '21', '22', '23', '24', '25',
-  '30', '31', '32', '33',
+  '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
+  '30', '31',
 ]

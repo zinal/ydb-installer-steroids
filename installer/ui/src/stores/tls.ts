@@ -159,7 +159,6 @@ export const useTlsStore = defineStore('tls', {
      * When `force` is true, the host-conflict check on the backend is skipped —
      * existing per-host material is overwritten. Used by the ydb flow (Screen 8)
      * where the user is setting up a fresh cluster and needs to regenerate.
-     * The em flow (Screen 23) uses the default (false) to protect a running cluster.
      */
     async generateCertificates(hosts: string[], force = false): Promise<GenerationResult> {
       this.generating = true

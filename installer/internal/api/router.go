@@ -16,14 +16,12 @@ type Options struct {
 	SessionStore *session.Store
 	// OperationStates holds separate InstallState instances per flow so that
 	// state never leaks between flows.
-	OperationStates   *models.OperationStates
-	SPA               fs.FS
-	InventoryWriter   *config.InventoryWriter
-	EMInventoryWriter *config.EMInventoryWriter
-	InventoryWSHub    *handlers.InventoryWSHub
-	InventoryPath     string
-	EMInventoryPath   string
-	ConfigPath        string
+	OperationStates *models.OperationStates
+	SPA             fs.FS
+	InventoryWriter *config.InventoryWriter
+	InventoryWSHub  *handlers.InventoryWSHub
+	InventoryPath   string
+	ConfigPath      string
 	// BundledDeps, when non-nil, makes /api/system/deps report the embedded
 	// runtime as the source of python/ansible/collection.
 	BundledDeps *checker.BundledInfo
@@ -38,10 +36,7 @@ func New(opts Options) http.Handler {
 	mux.HandleFunc("/api/session", handlers.Session(opts.SessionStore))
 
 	if opts.InventoryWriter != nil {
-		mux.HandleFunc("/api/inventory", handlers.Inventory(opts.SessionStore, opts.InventoryWriter, opts.EMInventoryWriter, opts.EMInventoryPath))
-	}
-	if opts.EMInventoryWriter != nil {
-		mux.HandleFunc("/api/em-inventory", handlers.EMInventory(opts.SessionStore, opts.EMInventoryWriter, opts.EMInventoryPath))
+		mux.HandleFunc("/api/inventory", handlers.Inventory(opts.SessionStore, opts.InventoryWriter))
 	}
 	if opts.InventoryWSHub != nil {
 		mux.HandleFunc("/ws/inventory", opts.InventoryWSHub.InventoryWebSocket())
@@ -70,11 +65,7 @@ func New(opts Options) http.Handler {
 		mux.HandleFunc("/api/install/ydb/generate-config", handlers.GenerateConfig(opts.SessionStore, opts.InventoryPath, opts.ConfigPath))
 		mux.HandleFunc("/api/install/ydb/start", handlers.YdbStart(opts.OperationStates, opts.SessionStore))
 		mux.HandleFunc("/api/install/ydb/create-database", handlers.CreateDatabase(opts.OperationStates))
-		// EM configuration lives entirely in 90-inventory.yaml — no config
-		// generation step.
-		mux.HandleFunc("/api/install/ydb-em/start", handlers.EmInstallStart(opts.OperationStates))
 		mux.HandleFunc("/api/install/delete-ydb/start", handlers.DeleteYdbStart(opts.OperationStates))
-		mux.HandleFunc("/api/install/delete-em-ydb/start", handlers.DeleteEmYdbStart(opts.OperationStates))
 		mux.HandleFunc("/api/install/status", handlers.InstallStatus(opts.OperationStates, opts.SessionStore))
 		mux.HandleFunc("/api/install/cancel", handlers.InstallCancel(opts.OperationStates, opts.SessionStore))
 		mux.HandleFunc("/api/install/logs", handlers.GetLogs(opts.OperationStates, opts.SessionStore))

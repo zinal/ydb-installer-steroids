@@ -51,48 +51,6 @@ describe('useDatabasesStore', () => {
     expect(store.entries).toHaveLength(1)
   })
 
-  it('setConfigVariant single-plus-em creates user + EM entries', () => {
-    const store = useDatabasesStore()
-    store.entries[0].name = 'appdb'
-    store.setConfigVariant('single-plus-em')
-    expect(store.configVariant).toBe('single-plus-em')
-    expect(store.entries).toHaveLength(2)
-    expect(store.entries[0].name).toBe('appdb')
-    expect(store.entries[1].name).toBe('ydb_em')
-    expect(store.isSinglePlusEm).toBe(true)
-    expect(store.emEntry?.name).toBe('ydb_em')
-  })
-
-  it('single-plus-em blocks addEntry and removeEntry', () => {
-    const store = useDatabasesStore()
-    store.setConfigVariant('single-plus-em')
-    store.addEntry()
-    expect(store.entries).toHaveLength(2)
-    store.removeEntry(0)
-    expect(store.entries).toHaveLength(2)
-  })
-
-  it('single-plus-em always forces EM DB name to ydb_em', () => {
-    const store = useDatabasesStore()
-    store.setConfigVariant('single-plus-em')
-    store.updateEntry(0, 'name', 'userdb')
-    store.updateEntry(1, 'name', 'emdb')
-    store.setConfigVariant('single')
-    expect(store.entries).toHaveLength(1)
-    store.setConfigVariant('single-plus-em')
-    expect(store.entries).toHaveLength(2)
-    expect(store.entries[0].name).toBe('userdb')
-    // EM DB name is forced to ydb_em regardless of what was saved
-    expect(store.entries[1].name).toBe('ydb_em')
-  })
-
-  it('totalDynamicPerHost multiplies by entry count in single-plus-em', () => {
-    const store = useDatabasesStore()
-    store.setConfigVariant('single-plus-em')
-    store.coresDynamic = 4
-    expect(store.totalDynamicPerHost).toBe(8)
-  })
-
   it('addEntry and removeEntry work correctly', () => {
     const store = useDatabasesStore()
     store.setConfigVariant('multiple')

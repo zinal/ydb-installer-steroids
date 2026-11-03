@@ -709,191 +709,16 @@ func TestInstallStatus_FlowAware(t *testing.T) {
 		t.Errorf("delete-ydb flow: expected success, got %v", body2["status"])
 	}
 
-	// Test 3: The ydb-em flow has its own state and must stay idle even though
-	// both the install and delete states are non-idle. Before InstallEM existed
-	// ForFlow returned nil here, which made the EM screens permanently idle.
-	storeEM := session.New("en")
-	flowEM := models.FlowYDBEM
-	storeEM.Update(models.SessionUpdate{Flow: &flowEM})
-
-	h3 := handlers.InstallStatus(states, storeEM)
-	req3 := httptest.NewRequest(http.MethodGet, "/api/install/status", nil)
-	rec3 := httptest.NewRecorder()
-	h3.ServeHTTP(rec3, req3)
-
-	var body3 map[string]any
-	json.NewDecoder(rec3.Body).Decode(&body3)
-	if body3["status"] != string(models.StatusIdle) {
-		t.Errorf("ydb-em flow: expected idle, got %v", body3["status"])
-	}
 }
 
-// TestInstallStatus_EmFlowIsolated verifies an EM install is visible to the
-// ydb-em flow and does NOT leak into the ydb flow.
-func TestInstallStatus_EmFlowIsolated(t *testing.T) {
-	states := newStates()
-
-	states.InstallEM.SetRunning([]models.Task{
-		{ID: 1, Name: "em-task", Status: models.TaskRunning},
-	}, func() {})
-
-	storeEM := session.New("en")
-	flowEM := models.FlowYDBEM
-	storeEM.Update(models.SessionUpdate{Flow: &flowEM})
-
-	rec := httptest.NewRecorder()
-	handlers.InstallStatus(states, storeEM).ServeHTTP(
-		rec, httptest.NewRequest(http.MethodGet, "/api/install/status", nil))
-
-	var body map[string]any
-	json.NewDecoder(rec.Body).Decode(&body)
-	if body["status"] != string(models.StatusRunning) {
-		t.Errorf("ydb-em flow: expected running, got %v", body["status"])
-	}
-
-	// The ydb flow must remain idle — no cross-flow leakage.
-	storeYdb := session.New("en")
-	flowYdb := models.FlowYDB
-	storeYdb.Update(models.SessionUpdate{Flow: &flowYdb})
-
-	rec2 := httptest.NewRecorder()
-	handlers.InstallStatus(states, storeYdb).ServeHTTP(
-		rec2, httptest.NewRequest(http.MethodGet, "/api/install/status", nil))
-
-	var body2 map[string]any
-	json.NewDecoder(rec2.Body).Decode(&body2)
-	if body2["status"] != string(models.StatusIdle) {
-		t.Errorf("ydb flow should stay idle, got %v", body2["status"])
-	}
-}
-
-// TestGetLogs_EmFlow verifies GetLogs reads the InstallEM broadcaster for the
-// ydb-em flow and does not return the install flow's logs.
-func TestGetLogs_EmFlow(t *testing.T) {
-	states := newStates()
-	states.InstallEM.WriteLog("[install-em] em line")
-	states.Install.WriteLog("[install] ydb line")
-
-	storeEM := session.New("en")
-	flowEM := models.FlowYDBEM
-	storeEM.Update(models.SessionUpdate{Flow: &flowEM})
-
-	rec := httptest.NewRecorder()
-	handlers.GetLogs(states, storeEM).ServeHTTP(
-		rec, httptest.NewRequest(http.MethodGet, "/api/install/logs", nil))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-
-	var body struct {
-		Logs []string `json:"logs"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-		t.Fatalf("decode error: %v", err)
-	}
-
-	joined := strings.Join(body.Logs, "\n")
-	if !strings.Contains(joined, "em line") {
-		t.Errorf("expected EM log line, got %q", joined)
-	}
-	if strings.Contains(joined, "ydb line") {
-		t.Errorf("EM logs must not contain install-flow lines, got %q", joined)
-	}
-}
-
-// TestEmInstallStart_BuildsTaskSequence verifies the EM start handler responds
-// 202 and seeds the task list from the ordered playbook sequence.
-func TestEmInstallStart_BuildsTaskSequence(t *testing.T) {
-	content := `all:
-	 children:
-	   ydb_em:
-	     hosts:
-	       em1.example.com:
-`
-	path := writeTempInventory(t, content)
-	defer os.RemoveAll(filepath.Dir(path))
-
-	states := newStates()
-	states.InstallEM.InventoryPath = path
-
-	rec := httptest.NewRecorder()
-	handlers.EmInstallStart(states).ServeHTTP(
-		rec, httptest.NewRequest(http.MethodPost, "/api/install/ydb-em/start", nil))
-
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d", rec.Code)
-	}
-
-	status, _, tasks, _ := states.InstallEM.Snapshot()
-	if status != models.StatusRunning {
-		t.Fatalf("expected running status, got %s", status)
-	}
-
-	if len(tasks) != 3 {
-		t.Fatalf("expected 3 tasks, got %d", len(tasks))
-	}
-
-	wantOrder := []string{"initial_setup", "install_agent", "register_agents"}
-	for i, want := range wantOrder {
-		if !strings.Contains(tasks[i].Name, want) {
-			t.Errorf("task %d name = %q, want it to mention %q", i, tasks[i].Name, want)
-		}
-		if tasks[i].ID != i+1 {
-			t.Errorf("task %d ID = %d, want %d", i, tasks[i].ID, i+1)
-		}
-	}
-
-	if st, _, _, _ := states.Install.Snapshot(); st != models.StatusIdle {
-		t.Errorf("install state should stay idle, got %s", st)
-	}
-}
-
-// TestEmInstallStart_RejectsSecondStart verifies a second start while running
-// is rejected with HTTP 409 instead of spawning a parallel run.
-func TestEmInstallStart_RejectsSecondStart(t *testing.T) {
-	states := newStates()
-	states.InstallEM.SetRunning([]models.Task{
-		{ID: 1, Name: "em-task", Status: models.TaskRunning},
-	}, func() {})
-
-	rec := httptest.NewRecorder()
-	handlers.EmInstallStart(states).ServeHTTP(
-		rec, httptest.NewRequest(http.MethodPost, "/api/install/ydb-em/start", nil))
-
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d", rec.Code)
-	}
-}
-
-// TestEmInstallStart_MethodNotAllowed verifies GET is rejected.
-func TestEmInstallStart_MethodNotAllowed(t *testing.T) {
-	states := newStates()
-
-	rec := httptest.NewRecorder()
-	handlers.EmInstallStart(states).ServeHTTP(
-		rec, httptest.NewRequest(http.MethodGet, "/api/install/ydb-em/start", nil))
-
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Errorf("expected 405, got %d", rec.Code)
-	}
-}
-
-// TestOperationStates_ForFlow verifies ForFlow returns the correct state.
 func TestOperationStates_ForFlow(t *testing.T) {
 	states := newStates()
 
 	if states.ForFlow(models.FlowYDB) != states.Install {
 		t.Error("FlowYDB should return Install state")
 	}
-	if states.ForFlow(models.FlowYDBEM) != states.InstallEM {
-		t.Error("FlowYDBEM should return InstallEM state")
-	}
 	if states.ForFlow(models.FlowDeleteYDB) != states.DeleteYdb {
 		t.Error("FlowDeleteYDB should return DeleteYdb state")
-	}
-	if states.ForFlow(models.FlowDeleteEMYDB) != states.DeleteEM {
-		t.Error("FlowDeleteEMYDB should return DeleteEM state")
 	}
 	if states.ForFlow(models.FlowNone) != nil {
 		t.Error("FlowNone should return nil")
@@ -903,170 +728,15 @@ func TestOperationStates_ForFlow(t *testing.T) {
 	}
 }
 
-// TestDeleteEmYdbStart_BuildsTaskSequence verifies the EM delete handler
-// responds 202 and seeds tasks from unregister_agents → uninstall only
-// (no YDB format_cluster).
-func TestDeleteEmYdbStart_BuildsTaskSequence(t *testing.T) {
-	content := `all:
-  children:
-    ydb_em:
-      hosts:
-        em1.example.com:
-`
-	path := writeTempInventory(t, content)
-	defer os.RemoveAll(filepath.Dir(path))
-
-	states := newStates()
-	states.DeleteEM.InventoryPath = path
-
-	rec := httptest.NewRecorder()
-	handlers.DeleteEmYdbStart(states).ServeHTTP(
-		rec, httptest.NewRequest(http.MethodPost, "/api/install/delete-em-ydb/start", nil))
-
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d", rec.Code)
-	}
-
-	status, _, tasks, _ := states.DeleteEM.Snapshot()
-	if status != models.StatusRunning {
-		t.Fatalf("expected running status, got %s", status)
-	}
-
-	if len(tasks) != 2 {
-		t.Fatalf("expected 2 tasks, got %d", len(tasks))
-	}
-
-	wantOrder := []string{"unregister_agents", "uninstall"}
-	for i, want := range wantOrder {
-		if !strings.Contains(tasks[i].Name, want) {
-			t.Errorf("task %d name = %q, want it to mention %q", i, tasks[i].Name, want)
-		}
-		if !strings.Contains(tasks[i].Name, "ydb_platform.ydb_em") {
-			t.Errorf("task %d name = %q, want ydb_platform.ydb_em namespace", i, tasks[i].Name)
-		}
-		if strings.Contains(tasks[i].Name, "format_cluster") {
-			t.Errorf("task %d must not reference format_cluster, got %q", i, tasks[i].Name)
-		}
-		if tasks[i].ID != i+1 {
-			t.Errorf("task %d ID = %d, want %d", i, tasks[i].ID, i+1)
-		}
-	}
-
-	if st, _, _, _ := states.Install.Snapshot(); st != models.StatusIdle {
-		t.Errorf("install state should stay idle, got %s", st)
-	}
-	if st, _, _, _ := states.DeleteYdb.Snapshot(); st != models.StatusIdle {
-		t.Errorf("delete-ydb state should stay idle, got %s", st)
-	}
-}
-
-// TestDeleteEmYdbStart_RejectsSecondStart verifies a second start while running
-// is rejected with HTTP 409.
-func TestDeleteEmYdbStart_RejectsSecondStart(t *testing.T) {
-	states := newStates()
-	states.DeleteEM.SetRunning([]models.Task{
-		{ID: 1, Name: "em-delete-task", Status: models.TaskRunning},
-	}, func() {})
-
-	rec := httptest.NewRecorder()
-	handlers.DeleteEmYdbStart(states).ServeHTTP(
-		rec, httptest.NewRequest(http.MethodPost, "/api/install/delete-em-ydb/start", nil))
-
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d", rec.Code)
-	}
-}
-
-// TestDeleteEmYdbStart_MethodNotAllowed verifies GET is rejected.
-func TestDeleteEmYdbStart_MethodNotAllowed(t *testing.T) {
-	states := newStates()
-
-	rec := httptest.NewRecorder()
-	handlers.DeleteEmYdbStart(states).ServeHTTP(
-		rec, httptest.NewRequest(http.MethodGet, "/api/install/delete-em-ydb/start", nil))
-
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Errorf("expected 405, got %d", rec.Code)
-	}
-}
-
-// TestInstallStatus_DeleteEmFlowIsolated verifies delete-em-ydb status does not
-// leak install or delete-ydb state.
-func TestInstallStatus_DeleteEmFlowIsolated(t *testing.T) {
-	states := newStates()
-
-	states.Install.SetRunning([]models.Task{
-		{ID: 1, Name: "ydb-task", Status: models.TaskRunning},
-	}, func() {})
-	states.DeleteYdb.SetRunning([]models.Task{
-		{ID: 1, Name: "delete-ydb-task", Status: models.TaskDone},
-	}, func() {})
-	states.DeleteYdb.SetDone()
-	states.DeleteEM.SetRunning([]models.Task{
-		{ID: 1, Name: "delete-em-task", Status: models.TaskRunning},
-	}, func() {})
-
-	store := session.New("en")
-	flow := models.FlowDeleteEMYDB
-	store.Update(models.SessionUpdate{Flow: &flow})
-
-	rec := httptest.NewRecorder()
-	handlers.InstallStatus(states, store).ServeHTTP(
-		rec, httptest.NewRequest(http.MethodGet, "/api/install/status", nil))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-
-	var body map[string]any
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if body["status"] != string(models.StatusRunning) {
-		t.Errorf("status = %v, want running", body["status"])
-	}
-	tasks, _ := body["tasks"].([]any)
-	if len(tasks) != 1 {
-		t.Fatalf("expected 1 task from DeleteEM, got %d", len(tasks))
-	}
-	task0, _ := tasks[0].(map[string]any)
-	if name, _ := task0["name"].(string); name != "delete-em-task" {
-		t.Errorf("task name = %v, want delete-em-task", task0["name"])
-	}
-}
-
-// TestOperationStates_EmIsDistinctInstance verifies InstallEM is its own
-// instance with its own Broadcaster — the guarantee that prevents EM state
-// from leaking into the other flows.
-func TestOperationStates_EmIsDistinctInstance(t *testing.T) {
-	states := newStates()
-
-	if states.InstallEM == nil {
-		t.Fatal("InstallEM must be initialised")
-	}
-	if states.InstallEM == states.Install {
-		t.Error("InstallEM must not alias Install")
-	}
-	if states.InstallEM == states.DeleteYdb || states.InstallEM == states.DeleteEM {
-		t.Error("InstallEM must not alias a delete state")
-	}
-	if states.InstallEM.Broadcaster == nil {
-		t.Error("InstallEM must have its own Broadcaster")
-	}
-	if states.InstallEM.Broadcaster == states.Install.Broadcaster {
-		t.Error("InstallEM must not share the Install Broadcaster")
-	}
-}
-
-// TestInstallStatus_OpQueryOverridesSessionFlow verifies ?op=ydb-em returns
-// InstallEM state even when the session flow is still ydb (screen 9.1 phase).
+// TestInstallStatus_OpQueryOverridesSessionFlow verifies ?op=delete-ydb returns
+// the delete state even when the session flow is still ydb.
 func TestInstallStatus_OpQueryOverridesSessionFlow(t *testing.T) {
 	states, store := newStatesWithFlow(models.FlowYDB)
 
-	states.InstallEM.SetRunning([]models.Task{
-		{ID: 1, Name: "em-task", Status: models.TaskPending},
+	states.DeleteYdb.SetRunning([]models.Task{
+		{ID: 1, Name: "delete-task", Status: models.TaskPending},
 	}, func() {})
-	states.InstallEM.SetDone()
+	states.DeleteYdb.SetDone()
 
 	rec := httptest.NewRecorder()
 	handlers.InstallStatus(states, store).ServeHTTP(
@@ -1081,12 +751,12 @@ func TestInstallStatus_OpQueryOverridesSessionFlow(t *testing.T) {
 
 	rec2 := httptest.NewRecorder()
 	handlers.InstallStatus(states, store).ServeHTTP(
-		rec2, httptest.NewRequest(http.MethodGet, "/api/install/status?op=ydb-em", nil))
+		rec2, httptest.NewRequest(http.MethodGet, "/api/install/status?op=delete-ydb", nil))
 	var body2 map[string]any
 	if err := json.NewDecoder(rec2.Body).Decode(&body2); err != nil {
 		t.Fatalf("decode op: %v", err)
 	}
 	if body2["status"] != string(models.StatusSuccess) {
-		t.Errorf("with op=ydb-em: status = %v, want success", body2["status"])
+		t.Errorf("with op=delete-ydb: status = %v, want success", body2["status"])
 	}
 }

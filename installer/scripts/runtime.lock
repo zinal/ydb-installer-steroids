@@ -36,28 +36,3 @@ COLLECTION_GIT_REF=main
 # on this path are NOT reproducible on another machine, so the git URL stays the
 # preferred source.
 COLLECTION_LOCAL_PATH=../ydb-ansible
-
-# ydb_platform.ydb_em Ansible collection source (YDB Enterprise Manager).
-#
-# Required by the EM install flow (screen 24), which runs
-# ydb_platform.ydb_em.{initial_setup,install_agent,register_agents}.
-#
-# Unlike ydb_platform.ydb, this collection does NOT live at the repository root:
-# it sits under ansible/ydb_platform/ydb_em, hence the #/… subdirectory
-# fragment that ansible-galaxy uses to locate it inside the clone.
-EM_COLLECTION_GIT_URL=git+https://github.com/ydb-platform/ydb-em#/ansible/ydb_platform/ydb_em
-EM_COLLECTION_GIT_REF=main
-
-# Local fallback for the EM collection.
-#
-# Used only when the git URL above is unset or unreachable (e.g. the repository
-# is private and no credentials are configured). Point it at a local checkout of
-# the collection directory — the one that contains galaxy.yml. Builds that rely
-# on this path are NOT reproducible on another machine, so the git URL stays the
-# preferred source.
-EM_COLLECTION_PATH=../ydb-em/ansible/ydb_platform/ydb_em
-
-# Extra Python packages required by the bundled collections at runtime.
-# ydb_platform.ydb_em declares pyyaml in its requirements.txt; without it the EM
-# playbooks fail on the control node.
-EXTRA_PYTHON_PACKAGES=pyyaml
